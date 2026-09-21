@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MEDSPIN 2026 — Progress Pendaftaran</title>
+<meta name="description" content="Dashboard live progress pendaftaran MEDSPIN 2026, sinkron otomatis dari Google Sheet.">
+</head>
+<body>
+<style>
+.viz-root {
+  color-scheme: light;
+  --surface-1:      #fcfcfb;
+  --surface-2:      #f9f9f7;
+  --text-primary:   #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted:     #898781;
+  --gridline:       #e1e0d9;
+  --baseline:       #c3c2b7;
+  --border:         rgba(11,11,11,0.10);
+
+  --series-olimpiade: #2a78d6;
+  --series-scipap:    #eb6834;
+  --series-pubpos:    #1baf7a;
+  --series-debate:    #eda100;
+  --series-wtf:       #e87ba4;
+
+  --status-good:      #0ca30c;
+  --status-warning:   #fab219;
+  --status-serious:   #ec835a;
+  --status-critical:  #d03b3b;
+
+  --seq-100: #cde2fb; --seq-250: #86b6ef; --seq-400: #3987e5; --seq-450:#2a78d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --surface-2:      #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+
+    --series-olimpiade: #3987e5;
+    --series-scipap:    #d95926;
+    --series-pubpos:    #199e70;
+    --series-debate:    #c98500;
+    --series-wtf:       #d55181;
+
+    --status-good:      #0ca30c;
+    --status-warning:   #fab219;
+    --status-serious:   #ec835a;
+    --status-critical:  #d03b3b;
+  }
+}
+:root[data-theme="dark"] .viz-root {
+  color-scheme: dark;
+  --surface-1:      #1a1a19;
+  --surface-2:      #0d0d0d;
+  --text-primary:   #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted:     #898781;
+  --gridline:       #2c2c2a;
+  --baseline:       #383835;
+  --border:         rgba(255,255,255,0.10);
+
+  --series-olimpiade: #3987e5;
+  --series-scipap:    #d95926;
+  --series-pubpos:    #199e70;
+  --series-debate:    #c98500;
+  --series-wtf:       #d55181;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--surface-2);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--text-primary);
+}
+.viz-root { background: var(--surface-2); min-height: 100vh; padding-bottom: 48px; }
+
+.page-header {
+  padding: 28px 20px 20px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.page-header h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+.page-header .sub { color: var(--text-secondary); font-size: 14px; margin: 0; }
+.page-header .meta { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; color: var(--text-muted); }
+.meta-item { display: flex; align-items: center; gap: 6px; }
+.dot-live { width: 7px; height: 7px; border-radius: 50%; background: var(--status-good); display: inline-block; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.4;} }
+
+.container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+
+/* Overall hero */
+.hero-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px 28px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+.hero-figure { font-size: 48px; font-weight: 700; line-height: 1; white-space: nowrap; }
+.hero-figure .of { font-size: 22px; font-weight: 500; color: var(--text-secondary); }
+.hero-label { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
+.hero-bar-wrap { flex: 1; min-width: 220px; }
+.hero-bar-track { height: 14px; border-radius: 7px; background: var(--seq-100); overflow: hidden; position: relative; }
+.hero-bar-fill { height: 100%; border-radius: 7px; background: linear-gradient(90deg, var(--seq-250), var(--seq-400)); transition: width 0.6s ease; }
+.hero-bar-labels { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--text-muted); }
+.hero-stats { display: flex; gap: 24px; flex-wrap: wrap; }
+.hero-stat { font-size: 13px; color: var(--text-secondary); }
+.hero-stat strong { display: block; font-size: 18px; color: var(--text-primary); font-weight: 700; }
+
+/* KPI grid */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+.kpi-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  position: relative;
+}
+.kpi-top { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; margin-bottom: 10px; }
+.kpi-name { font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.kpi-swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.status-pill {
+  font-size: 10.5px; font-weight: 600; padding: 3px 8px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+}
+.status-pill .ic { width: 6px; height: 6px; border-radius: 50%; }
+.pill-good { background: rgba(12,163,12,0.14); color: var(--status-good); }
+.pill-warn { background: rgba(236,131,90,0.16); color: #b5502a; }
+.pill-crit { background: rgba(208,59,59,0.14); color: var(--status-critical); }
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .pill-warn { color: var(--status-serious); }
+}
+:root[data-theme="dark"] .pill-warn { color: var(--status-serious); }
+
+.kpi-value { font-size: 26px; font-weight: 700; margin-bottom: 2px; }
+.kpi-value .kpi-target { font-size: 14px; font-weight: 500; color: var(--text-secondary); }
+.kpi-bar-track { height: 8px; border-radius: 4px; background: var(--gridline); overflow: hidden; margin: 10px 0 8px; }
+.kpi-bar-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+.kpi-footer { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--text-muted); }
+.kpi-footer .gap-warn { color: var(--status-critical); font-weight: 600; }
+.kpi-footer .gap-ok { color: var(--status-good); font-weight: 600; }
+
+/* Chart cards */
+.chart-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 22px 16px;
+  margin-bottom: 18px;
+}
+.chart-card h2 { font-size: 15px; font-weight: 700; margin: 0 0 2px; }
+.chart-card .chart-sub { font-size: 12.5px; color: var(--text-secondary); margin: 0 0 14px; }
+.charts-row { display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px; }
+@media (max-width: 800px) { .charts-row { grid-template-columns: 1fr; } }
+
+.legend { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; font-size: 12px; color: var(--text-secondary); }
+.legend-item { display: flex; align-items: center; gap: 6px; }
+.legend-key { width: 14px; height: 3px; border-radius: 2px; }
+
+svg text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+.axis-label { fill: var(--text-muted); font-size: 10.5px; }
+.gridline { stroke: var(--gridline); stroke-width: 1; }
+.baseline { stroke: var(--baseline); stroke-width: 1; }
+
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--text-primary);
+  color: var(--surface-1);
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  opacity: 0;
+  transition: opacity 0.1s;
+  z-index: 10;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+}
+.tooltip .t-title { font-weight: 700; margin-bottom: 4px; }
+.tooltip .t-row { display: flex; align-items: center; gap: 6px; }
+.tooltip .t-key { width: 8px; height: 8px; border-radius: 2px; }
+.tooltip .t-val { font-weight: 700; margin-left: auto; padding-left: 10px; }
+
+.donut-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.donut-item { text-align: center; }
+.donut-item .d-label { font-size: 12px; font-weight: 600; margin-top: 6px; }
+.donut-item .d-value { font-size: 11.5px; color: var(--text-secondary); }
+
+.table-view { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 6px; }
+.table-view th { text-align: left; color: var(--text-muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; padding: 6px 10px; border-bottom: 1px solid var(--gridline); }
+.table-view td { padding: 8px 10px; border-bottom: 1px solid var(--gridline); font-variant-numeric: tabular-nums; }
+.table-view tr:last-child td { border-bottom: none; }
+details.table-toggle { margin-top: 4px; }
+details.table-toggle summary { cursor: pointer; font-size: 12.5px; color: var(--text-secondary); padding: 4px 0; }
+
+.state-banner {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 18px; font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;
+  display: none; align-items: center; gap: 8px;
+}
+.state-banner.show { display: flex; }
+.state-banner.error { color: var(--status-critical); }
+
+.footer-note { text-align: center; font-size: 11.5px; color: var(--text-muted); margin-top: 20px; }
+.refresh-btn {
+  font-size: 12px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface-1); color: var(--text-secondary); cursor: pointer; font-family: inherit;
+}
+.refresh-btn:hover { background: var(--gridline); }
+.header-actions { display:flex; align-items:center; gap:10px; margin-top: 10px; }
+</style>
+
+<div class="viz-root">
+  <div class="page-header">
+    <h1>MEDSPIN 2026 — Progress Pendaftaran</h1>
+    <p class="sub">Dashboard live untuk panitia — data diambil langsung dari Google Sheet, update otomatis.</p>
+    <div class="meta">
+      <span class="meta-item"><span class="dot-live"></span> <span id="live-status">Menghubungkan ke data...</span></span>
+      <span class="meta-item" id="snapshot-date-label"></span>
+    </div>
+    <div class="header-actions">
+      <button class="refresh-btn" id="refresh-btn">↻ Muat ulang data</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="state-banner" id="state-banner"></div>
+
+    <!-- Hero: overall -->
+    <div class="hero-card" id="hero-card"></div>
+
+    <!-- KPI cards per category -->
+    <div class="kpi-grid" id="kpi-grid"></div>
+
+    <!-- Trend chart -->
+    <div class="chart-card">
+      <h2>Tren pendaftaran kumulatif per hari</h2>
+      <p class="chart-sub">Garis putus-putus menandakan target tiap cabang. Arahkan kursor untuk lihat detail per tanggal.</p>
+      <div class="legend" id="trend-legend"></div>
+      <div style="position:relative;">
+        <svg id="trend-chart" style="width:100%; height:320px; display:block;"></svg>
+        <div class="tooltip" id="trend-tooltip"></div>
+      </div>
+      <details class="table-toggle">
+        <summary>Lihat sebagai tabel</summary>
+        <div style="overflow-x:auto;"><table class="table-view" id="trend-table"></table></div>
+      </details>
+    </div>
+
+    <div class="charts-row">
+      <!-- Bar chart: current vs target -->
+      <div class="chart-card">
+        <h2>Perolehan saat ini vs target</h2>
+        <p class="chart-sub">Batang penuh = target. Arahkan kursor untuk detail.</p>
+        <div style="position:relative;">
+          <svg id="bar-chart" style="width:100%; height:260px; display:block;"></svg>
+          <div class="tooltip" id="bar-tooltip"></div>
+        </div>
+      </div>
+
+      <!-- Donut charts -->
+      <div class="chart-card">
+        <h2>Komposisi per cabang</h2>
+        <p class="chart-sub">Terdaftar vs sisa menuju target.</p>
+        <div class="donut-grid" id="donut-grid"></div>
+      </div>
+    </div>
+
+    <p class="footer-note" id="footer-note"></p>
+  </div>
+</div>
+
+<script>
+(function () {
+  const SHEET_ID = "1YM7Qf-hVMFtqzR0OP4yIT67OiKlrd35jSNRGCUJFQks";
+  const GVIZ = (sheet) => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheet)}`;
+
+  const CATEGORY_COLOR = {
+    "Olimpiade": "var(--series-olimpiade)",
+    "Scientific Paper": "var(--series-scipap)",
+    "Public Poster": "var(--series-pubpos)",
+    "Debate": "var(--series-debate)",
+    "WTF": "var(--series-wtf)"
+  };
+  const CATEGORY_ORDER = ["Olimpiade", "Scientific Paper", "Public Poster", "Debate", "WTF"];
+
+  function resolveVar(v) {
+    if (!v.startsWith("var(")) return v;
+    const name = v.slice(4, -1);
+    return getComputedStyle(document.querySelector(".viz-root")).getPropertyValue(name).trim();
+  }
+
+  function statusPillClass(status) {
+    if (/target met|on track|good/i.test(status)) return "pill-good";
+    if (/below pace/i.test(status)) return "pill-warn";
+    return "pill-warn";
+  }
+  function statusIconColor(status) {
+    if (/target met|on track|good/i.test(status)) return "var(--status-good)";
+    if (/below pace/i.test(status)) return "var(--status-serious)";
+    return "var(--status-warning)";
+  }
+
+  async function fetchGviz(sheetName) {
+    const res = await fetch(GVIZ(sheetName));
+    if (!res.ok) throw new Error("HTTP " + res.status + " untuk sheet " + sheetName);
+    const text = await res.text();
+    const jsonStr = text.substring(text.indexOf("{"), text.lastIndexOf("}") + 1);
+    const data = JSON.parse(jsonStr);
+    const cols = data.table.cols.map(c => c.label || c.id);
+    const rows = data.table.rows.map(r => r.c.map(c => (c ? (c.f !== undefined && c.f !== null ? c.f : c.v) : null)));
+    return { cols, rows };
+  }
+
+  function toObjects(cols, rows) {
+    return rows.map(r => {
+      const o = {};
+      cols.forEach((c, i) => o[c] = r[i]);
+      return o;
+    });
+  }
+
+  function parsePercent(v) {
+    if (typeof v === "number") return v <= 1 ? v * 100 : v;
+    if (typeof v === "string") return parseFloat(v.replace("%", "").trim());
+    return 0;
+  }
+  function num(v) {
+    if (typeof v === "number") return v;
+    if (typeof v === "string") return parseFloat(v.replace(/,/g, "")) || 0;
+    return 0;
+  }
+  function fmtInt(n) { return Math.round(n).toLocaleString("id-ID"); }
+  function fmtDate(v) {
+    if (v instanceof Date) return v;
+    if (typeof v === "string" && /^Date\(/.test(v)) {
+      const m = v.match(/Date\((\d+),(\d+),(\d+)/);
+      if (m) return new Date(+m[1], +m[2], +m[3]);
+    }
+    if (typeof v === "string") {
+      const d = new Date(v);
+      if (!isNaN(d)) return d;
+    }
+    return null;
+  }
+  function fmtDateShort(d) {
+    return d.toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  const state = { current: null, trend: null, donut: null };
+
+  function renderHero(currentRows) {
+    const overall = currentRows.find(r => r.Category === "Overall");
+    if (!overall) return;
+    const current = num(overall.Current), target = num(overall.Target), progress = parsePercent(overall.Progress);
+    const daysLeft = num(overall["Days Left"]);
+    const hero = document.getElementById("hero-card");
+    hero.innerHTML = `
+      <div>
+        <div class="hero-figure">${fmtInt(current)}<span class="of"> / ${fmtInt(target)}</span></div>
+        <div class="hero-label">Total peserta terdaftar (semua cabang) · ${daysLeft} hari lagi menuju deadline terdekat</div>
+      </div>
+      <div class="hero-bar-wrap">
+        <div class="hero-bar-track"><div class="hero-bar-fill" style="width:${Math.min(progress,100)}%"></div></div>
+        <div class="hero-bar-labels"><span>${progress.toFixed(1)}% tercapai</span><span>Target: ${fmtInt(target)}</span></div>
+      </div>
+      <div class="hero-stats">
+        <div class="hero-stat"><strong>${fmtInt(num(overall.Remaining))}</strong>Kekurangan peserta</div>
+        <div class="hero-stat"><strong>${num(overall["Required Pace"]).toFixed(1)}/hari</strong>Pace dibutuhkan</div>
+      </div>
+    `;
+  }
+
+  function renderKpiGrid(currentRows) {
+    const grid = document.getElementById("kpi-grid");
+    grid.innerHTML = "";
+    CATEGORY_ORDER.forEach(cat => {
+      const row = currentRows.find(r => r.Category === cat);
+      if (!row) return;
+      const current = num(row.Current), target = num(row.Target), progress = parsePercent(row.Progress);
+      const remaining = num(row.Remaining);
+      const requiredPace = num(row["Required Pace"]);
+      const avgPace = num(row["7D Avg / Day"]);
+      const status = row.Status || "";
+      const color = CATEGORY_COLOR[cat];
+      const gapClass = requiredPace > avgPace ? "gap-warn" : "gap-ok";
+      const card = document.createElement("div");
+      card.className = "kpi-card";
+      card.innerHTML = `
+        <div class="kpi-top">
+          <div class="kpi-name"><span class="kpi-swatch" style="background:${color}"></span>${escapeHtml(cat)}</div>
+          <span class="status-pill ${statusPillClass(status)}"><span class="ic" style="background:${statusIconColor(status)}"></span>${escapeHtml(status)}</span>
+        </div>
+        <div class="kpi-value">${fmtInt(current)}<span class="kpi-target"> / ${fmtInt(target)}</span></div>
+        <div class="kpi-bar-track"><div class="kpi-bar-fill" style="width:${Math.min(progress,100)}%; background:${color}"></div></div>
+        <div class="kpi-footer">
+          <span>${progress.toFixed(1)}%</span>
+          <span class="${gapClass}">${remaining > 0 ? "kurang " + fmtInt(remaining) : "tercapai"} · butuh ${requiredPace.toFixed(1)}/hari</span>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  }
+
+  function renderDonuts(donutRows) {
+    const grid = document.getElementById("donut-grid");
+    grid.innerHTML = "";
+    CATEGORY_ORDER.forEach(cat => {
+      const rows = donutRows.filter(r => r.Category === cat);
+      const reg = rows.find(r => r.Segment === "Registered");
+      const rem = rows.find(r => r.Segment === "Remaining");
+      if (!reg) return;
+      const regVal = num(reg.Value), remVal = rem ? num(rem.Value) : 0;
+      const total = regVal + remVal || 1;
+      const progress = (regVal / total) * 100;
+      const color = resolveVar(CATEGORY_COLOR[cat]);
+      const track = resolveVar("var(--gridline)");
+      const r = 32, circ = 2 * Math.PI * r;
+      const dash = (progress / 100) * circ;
+      const item = document.createElement("div");
+      item.className = "donut-item";
+      item.innerHTML = `
+        <svg width="84" height="84" viewBox="0 0 84 84">
+          <circle cx="42" cy="42" r="${r}" fill="none" stroke="${track}" stroke-width="10"/>
+          <circle cx="42" cy="42" r="${r}" fill="none" stroke="${color}" stroke-width="10"
+            stroke-dasharray="${dash} ${circ - dash}" stroke-linecap="round"
+            transform="rotate(-90 42 42)"/>
+          <text x="42" y="46" text-anchor="middle" font-size="15" font-weight="700" fill="${resolveVar('var(--text-primary)')}">${progress.toFixed(0)}%</text>
+        </svg>
+        <div class="d-label">${escapeHtml(cat)}</div>
+        <div class="d-value">${fmtInt(regVal)} / ${fmtInt(total)}</div>
+      `;
+      grid.appendChild(item);
+    });
+  }
+
+  function renderBarChart(currentRows) {
+    const svg = document.getElementById("bar-chart");
+    const tooltip = document.getElementById("bar-tooltip");
+    const rows = CATEGORY_ORDER.map(cat => currentRows.find(r => r.Category === cat)).filter(Boolean);
+    const W = svg.clientWidth || 480, H = 260;
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    svg.innerHTML = "";
+    const marginL = 46, marginR = 12, marginT = 10, marginB = 34;
+    const plotW = W - marginL - marginR, plotH = H - marginT - marginB;
+    const maxVal = Math.max(...rows.map(r => num(r.Target))) * 1.08;
+    const bandW = plotW / rows.length;
+    const barW = Math.min(56, bandW * 0.44);
+    const gap = 3;
+
+    const yTicks = 4;
+    for (let i = 0; i <= yTicks; i++) {
+      const v = (maxVal / yTicks) * i;
+      const y = marginT + plotH - (v / maxVal) * plotH;
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", marginL); line.setAttribute("x2", W - marginR);
+      line.setAttribute("y1", y); line.setAttribute("y2", y);
+      line.setAttribute("class", "gridline");
+      svg.appendChild(line);
+      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      label.setAttribute("x", marginL - 8); label.setAttribute("y", y + 3);
+      label.setAttribute("text-anchor", "end"); label.setAttribute("class", "axis-label");
+      label.textContent = fmtInt(v);
+      svg.appendChild(label);
+    }
+
+    rows.forEach((row, i) => {
+      const cx = marginL + bandW * i + bandW / 2;
+      const current = num(row.Current), target = num(row.Target);
+      const color = resolveVar(CATEGORY_COLOR[row.Category]);
+      const trackColor = resolveVar("var(--gridline)");
+
+      const targetH = (target / maxVal) * plotH;
+      const targetRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      targetRect.setAttribute("x", cx - barW / 2 - gap - barW / 2);
+      targetRect.setAttribute("y", marginT + plotH - targetH);
+      targetRect.setAttribute("width", barW);
+      targetRect.setAttribute("height", Math.max(targetH, 1));
+      targetRect.setAttribute("rx", 4);
+      targetRect.setAttribute("fill", trackColor);
+      svg.appendChild(targetRect);
+
+      const curH = (current / maxVal) * plotH;
+      const curRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      curRect.setAttribute("x", cx + gap / 2);
+      curRect.setAttribute("y", marginT + plotH - curH);
+      curRect.setAttribute("width", barW);
+      curRect.setAttribute("height", Math.max(curH, 1));
+      curRect.setAttribute("rx", 4);
+      curRect.setAttribute("fill", color);
+      curRect.style.cursor = "pointer";
+      svg.appendChild(curRect);
+
+      [targetRect, curRect].forEach(rect => {
+        rect.addEventListener("pointermove", (e) => {
+          const bbox = svg.getBoundingClientRect();
+          tooltip.style.opacity = 1;
+          tooltip.style.left = (e.clientX - bbox.left + 12) + "px";
+          tooltip.style.top = (e.clientY - bbox.top - 10) + "px";
+          tooltip.innerHTML = `<div class="t-title">${escapeHtml(row.Category)}</div>
+            <div class="t-row"><span class="t-key" style="background:${color}"></span>Saat ini<span class="t-val">${fmtInt(current)}</span></div>
+            <div class="t-row"><span class="t-key" style="background:${trackColor}"></span>Target<span class="t-val">${fmtInt(target)}</span></div>`;
+        });
+        rect.addEventListener("pointerleave", () => tooltip.style.opacity = 0);
+      });
+
+      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      label.setAttribute("x", cx); label.setAttribute("y", H - marginB + 18);
+      label.setAttribute("text-anchor", "middle"); label.setAttribute("class", "axis-label");
+      label.textContent = row.Category.length > 10 ? row.Category.split(" ")[0] : row.Category;
+      svg.appendChild(label);
+    });
+
+    const baseline = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    baseline.setAttribute("x1", marginL); baseline.setAttribute("x2", W - marginR);
+    baseline.setAttribute("y1", marginT + plotH); baseline.setAttribute("y2", marginT + plotH);
+    baseline.setAttribute("class", "baseline");
+    svg.appendChild(baseline);
+  }
+
+  function renderTrendLegend() {
+    const legend = document.getElementById("trend-legend");
+    legend.innerHTML = CATEGORY_ORDER.map(cat => `
+      <span class="legend-item"><span class="legend-key" style="background:${resolveVar(CATEGORY_COLOR[cat])}"></span>${escapeHtml(cat)}</span>
+    `).join("");
+  }
+
+  function renderTrendChart(trendRows) {
+    const svg = document.getElementById("trend-chart");
+    const tooltip = document.getElementById("trend-tooltip");
+    const byCat = {};
+    CATEGORY_ORDER.forEach(cat => byCat[cat] = []);
+    trendRows.forEach(r => {
+      const d = fmtDate(r.Date);
+      if (!d || !byCat[r.Category]) return;
+      byCat[r.Category].push({ date: d, value: num(r.Quantity), target: num(r.Target) });
+    });
+    CATEGORY_ORDER.forEach(cat => byCat[cat].sort((a, b) => a.date - b.date));
+
+    const allDates = byCat[CATEGORY_ORDER[0]].map(p => p.date);
+    if (!allDates.length) return;
+    const W = svg.clientWidth || 700, H = 320;
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    svg.innerHTML = "";
+    const marginL = 46, marginR = 16, marginT = 12, marginB = 28;
+    const plotW = W - marginL - marginR, plotH = H - marginT - marginB;
+
+    const maxTarget = Math.max(...CATEGORY_ORDER.map(cat => Math.max(...byCat[cat].map(p => p.target))));
+    const maxVal = maxTarget * 1.15;
+    const minDate = allDates[0].getTime(), maxDate = allDates[allDates.length - 1].getTime();
+    const xScale = (d) => marginL + ((d.getTime() - minDate) / (maxDate - minDate || 1)) * plotW;
+    const yScale = (v) => marginT + plotH - (v / maxVal) * plotH;
+
+    const yTicks = 4;
+    for (let i = 0; i <= yTicks; i++) {
+      const v = (maxVal / yTicks) * i;
+      const y = yScale(v);
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", marginL); line.setAttribute("x2", W - marginR);
+      line.setAttribute("y1", y); line.setAttribute("y2", y);
+      line.setAttribute("class", "gridline");
+      svg.appendChild(line);
+      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      label.setAttribute("x", marginL - 8); label.setAttribute("y", y + 3);
+      label.setAttribute("text-anchor", "end"); label.setAttribute("class", "axis-label");
+      label.textContent = fmtInt(v);
+      svg.appendChild(label);
+    }
+
+    const dateTickCount = 6;
+    for (let i = 0; i <= dateTickCount; i++) {
+      const t = minDate + ((maxDate - minDate) / dateTickCount) * i;
+      const x = xScale(new Date(t));
+      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      label.setAttribute("x", x); label.setAttribute("y", H - marginB + 16);
+      label.setAttribute("text-anchor", "middle"); label.setAttribute("class", "axis-label");
+      label.textContent = fmtDateShort(new Date(t));
+      svg.appendChild(label);
+    }
+
+    CATEGORY_ORDER.forEach(cat => {
+      const color = resolveVar(CATEGORY_COLOR[cat]);
+      const points = byCat[cat];
+      if (!points.length) return;
+      const targetY = yScale(points[0].target);
+      const dashLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      dashLine.setAttribute("x1", marginL); dashLine.setAttribute("x2", W - marginR);
+      dashLine.setAttribute("y1", targetY); dashLine.setAttribute("y2", targetY);
+      dashLine.setAttribute("stroke", color); dashLine.setAttribute("stroke-width", 1);
+      dashLine.setAttribute("stroke-dasharray", "3,4"); dashLine.setAttribute("opacity", "0.45");
+      svg.appendChild(dashLine);
+
+      const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"} ${xScale(p.date)} ${yScale(p.value)}`).join(" ");
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", pathD);
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", color);
+      path.setAttribute("stroke-width", 2);
+      path.setAttribute("stroke-linejoin", "round");
+      path.setAttribute("stroke-linecap", "round");
+      svg.appendChild(path);
+
+      const last = points[points.length - 1];
+      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      dot.setAttribute("cx", xScale(last.date)); dot.setAttribute("cy", yScale(last.value));
+      dot.setAttribute("r", 4); dot.setAttribute("fill", color);
+      dot.setAttribute("stroke", resolveVar("var(--surface-1)")); dot.setAttribute("stroke-width", 2);
+      svg.appendChild(dot);
+    });
+
+    const hitRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    hitRect.setAttribute("x", marginL); hitRect.setAttribute("y", marginT);
+    hitRect.setAttribute("width", plotW); hitRect.setAttribute("height", plotH);
+    hitRect.setAttribute("fill", "transparent");
+    svg.appendChild(hitRect);
+
+    const crosshair = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    crosshair.setAttribute("y1", marginT); crosshair.setAttribute("y2", marginT + plotH);
+    crosshair.setAttribute("stroke", resolveVar("var(--baseline)"));
+    crosshair.setAttribute("stroke-width", 1);
+    crosshair.style.display = "none";
+    svg.appendChild(crosshair);
+
+    hitRect.addEventListener("pointermove", (e) => {
+      const bbox = svg.getBoundingClientRect();
+      const scaleX = W / bbox.width;
+      const mouseX = (e.clientX - bbox.left) * scaleX;
+      const ratio = Math.max(0, Math.min(1, (mouseX - marginL) / plotW));
+      const t = minDate + ratio * (maxDate - minDate);
+      let nearest = allDates[0], minDiff = Infinity;
+      allDates.forEach(d => { const diff = Math.abs(d.getTime() - t); if (diff < minDiff) { minDiff = diff; nearest = d; } });
+      const x = xScale(nearest);
+      crosshair.setAttribute("x1", x); crosshair.setAttribute("x2", x);
+      crosshair.style.display = "block";
+
+      let rowsHtml = "";
+      CATEGORY_ORDER.forEach(cat => {
+        const p = byCat[cat].find(pt => pt.date.getTime() === nearest.getTime());
+        if (!p) return;
+        rowsHtml += `<div class="t-row"><span class="t-key" style="background:${resolveVar(CATEGORY_COLOR[cat])}"></span>${escapeHtml(cat)}<span class="t-val">${fmtInt(p.value)}</span></div>`;
+      });
+      tooltip.innerHTML = `<div class="t-title">${nearest.toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" })}</div>${rowsHtml}`;
+      tooltip.style.opacity = 1;
+      const tRect = tooltip.getBoundingClientRect();
+      let left = (e.clientX - bbox.left + 14);
+      if (left + tRect.width > bbox.width) left = e.clientX - bbox.left - tRect.width - 14;
+      tooltip.style.left = left + "px";
+      tooltip.style.top = (e.clientY - bbox.top - 20) + "px";
+    });
+    hitRect.addEventListener("pointerleave", () => { tooltip.style.opacity = 0; crosshair.style.display = "none"; });
+  }
+
+  function renderTrendTable(trendRows) {
+    const table = document.getElementById("trend-table");
+    const dates = [...new Set(trendRows.map(r => { const d = fmtDate(r.Date); return d ? d.toISOString().slice(0,10) : null; }))].filter(Boolean).sort();
+    const recentDates = dates.slice(-14);
+    let html = "<thead><tr><th>Tanggal</th>" + CATEGORY_ORDER.map(c => `<th>${escapeHtml(c)}</th>`).join("") + "</tr></thead><tbody>";
+    recentDates.forEach(dateStr => {
+      html += `<tr><td>${dateStr}</td>`;
+      CATEGORY_ORDER.forEach(cat => {
+        const row = trendRows.find(r => { const d = fmtDate(r.Date); return d && d.toISOString().slice(0,10) === dateStr && r.Category === cat; });
+        html += `<td>${row ? fmtInt(num(row.Quantity)) : "-"}</td>`;
+      });
+      html += "</tr>";
+    });
+    html += "</tbody>";
+    table.innerHTML = html;
+  }
+
+  function showBanner(msg, isError) {
+    const banner = document.getElementById("state-banner");
+    banner.textContent = msg;
+    banner.className = "state-banner show" + (isError ? " error" : "");
+  }
+  function hideBanner() {
+    document.getElementById("state-banner").className = "state-banner";
+  }
+
+  async function loadAll() {
+    document.getElementById("live-status").textContent = "Memuat data terbaru...";
+    try {
+      const [current, trend, donut] = await Promise.all([
+        fetchGviz("Current_Looker"),
+        fetchGviz("Trend_Looker"),
+        fetchGviz("Donut_Looker")
+      ]);
+      const currentRows = toObjects(current.cols, current.rows);
+      const trendRows = toObjects(trend.cols, trend.rows);
+      const donutRows = toObjects(donut.cols, donut.rows);
+
+      state.current = currentRows; state.trend = trendRows; state.donut = donutRows;
+
+      renderHero(currentRows);
+      renderKpiGrid(currentRows);
+      renderBarChart(currentRows);
+      renderTrendLegend();
+      renderTrendChart(trendRows);
+      renderTrendTable(trendRows);
+      renderDonuts(donutRows);
+
+      const overall = currentRows.find(r => r.Category === "Overall");
+      const snapDate = overall ? overall["Snapshot Date"] : "";
+      document.getElementById("snapshot-date-label").textContent = "Snapshot terakhir: " + snapDate;
+      document.getElementById("footer-note").textContent = "Sumber data: Google Sheet \"MEDSPIN 2026 Central Dashboard\" — tab Current_Looker, Trend_Looker, Donut_Looker. Dimuat otomatis saat halaman dibuka.";
+      document.getElementById("live-status").textContent = "Terhubung — data live";
+      hideBanner();
+    } catch (err) {
+      console.error(err);
+      document.getElementById("live-status").textContent = "Gagal memuat data";
+      showBanner("Gagal mengambil data dari Google Sheet. Pastikan sheet dapat diakses (\"Anyone with the link\") dan koneksi internet aktif. Detail: " + err.message, true);
+    }
+  }
+
+  document.getElementById("refresh-btn").addEventListener("click", loadAll);
+  window.addEventListener("resize", () => {
+    if (!state.current) return;
+    renderBarChart(state.current);
+    renderTrendChart(state.trend);
+  });
+
+  loadAll();
+})();
+</script>
+
+</body>
+</html>
