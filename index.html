@@ -1,287 +1,355 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="id" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MEDSPIN 2026 — Progress Pendaftaran</title>
 <meta name="description" content="Dashboard live progress pendaftaran MEDSPIN 2026, sinkron otomatis dari Google Sheet.">
-</head>
-<body>
+<script>
+  // Tema di-set SEBELUM render supaya tidak ada kedipan, dan supaya halaman
+  // TIDAK pernah ikut dark mode OS tanpa ikut mengganti warna teks.
+  (function () {
+    try {
+      var saved = localStorage.getItem("medspin-theme");
+      var t = (saved === "light" || saved === "dark") ? saved
+        : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {
+      document.documentElement.setAttribute("data-theme", "light");
+    }
+  })();
+</script>
 <style>
-.viz-root {
+/* ============================================================
+   TOKEN WARNA — selalu berpasangan (bg + teks) dalam satu tema.
+   Tidak ada teks hitam tanpa latar terang yang ikut dideklarasikan,
+   jadi tulisan mustahil "hilang" di dark mode.
+   ============================================================ */
+html[data-theme="light"] {
   color-scheme: light;
-  --surface-1:      #fcfcfb;
-  --surface-2:      #f9f9f7;
-  --text-primary:   #0b0b0b;
-  --text-secondary: #52514e;
-  --text-muted:     #898781;
-  --gridline:       #e1e0d9;
-  --baseline:       #c3c2b7;
-  --border:         rgba(11,11,11,0.10);
+  --page:           #f2f2ee;
+  --card:           #ffffff;
+  --card-sunken:    #f7f7f3;
+  --text-strong:    #14140f;
+  --text:           #3c3b35;
+  --text-muted:     #6e6d64;
+  --gridline:       #e3e2da;
+  --baseline:       #bfbeb3;
+  --border:         #dedcd2;
+  --border-strong:  #c9c7bb;
 
-  --series-olimpiade: #2a78d6;
-  --series-scipap:    #eb6834;
-  --series-pubpos:    #1baf7a;
-  --series-debate:    #eda100;
-  --series-wtf:       #e87ba4;
+  --series-olimpiade: #1f6fd0;
+  --series-scipap:    #d4521e;
+  --series-pubpos:    #0f8f62;
+  --series-debate:    #a87400;
+  --series-wtf:       #c2456f;
 
-  --status-good:      #0ca30c;
-  --status-warning:   #fab219;
-  --status-serious:   #ec835a;
-  --status-critical:  #d03b3b;
+  --good-fg:  #0b7a2b;  --good-bg:  #e4f4e7;  --good-bd:  #a9dcb6;
+  --warn-fg:  #8a5400;  --warn-bg:  #fdf0d5;  --warn-bd:  #eccb8a;
+  --crit-fg:  #b02020;  --crit-bg:  #fbe6e4;  --crit-bd:  #eab0aa;
 
-  --seq-100: #cde2fb; --seq-250: #86b6ef; --seq-400: #3987e5; --seq-450:#2a78d6;
+  --track:    #e6e5dc;
+  --shadow:   0 1px 2px rgba(20,20,15,.05), 0 8px 24px rgba(20,20,15,.05);
 }
-@media (prefers-color-scheme: dark) {
-  :root:where(:not([data-theme="light"])) .viz-root {
-    color-scheme: dark;
-    --surface-1:      #1a1a19;
-    --surface-2:      #0d0d0d;
-    --text-primary:   #ffffff;
-    --text-secondary: #c3c2b7;
-    --text-muted:     #898781;
-    --gridline:       #2c2c2a;
-    --baseline:       #383835;
-    --border:         rgba(255,255,255,0.10);
-
-    --series-olimpiade: #3987e5;
-    --series-scipap:    #d95926;
-    --series-pubpos:    #199e70;
-    --series-debate:    #c98500;
-    --series-wtf:       #d55181;
-
-    --status-good:      #0ca30c;
-    --status-warning:   #fab219;
-    --status-serious:   #ec835a;
-    --status-critical:  #d03b3b;
-  }
-}
-:root[data-theme="dark"] .viz-root {
+html[data-theme="dark"] {
   color-scheme: dark;
-  --surface-1:      #1a1a19;
-  --surface-2:      #0d0d0d;
-  --text-primary:   #ffffff;
-  --text-secondary: #c3c2b7;
-  --text-muted:     #898781;
-  --gridline:       #2c2c2a;
-  --baseline:       #383835;
-  --border:         rgba(255,255,255,0.10);
+  --page:           #0d0d0c;
+  --card:           #1a1a18;
+  --card-sunken:    #232320;
+  --text-strong:    #fbfbf8;
+  --text:           #cecdc4;
+  --text-muted:     #94938a;
+  --gridline:       #2e2e2b;
+  --baseline:       #44443f;
+  --border:         #2c2c29;
+  --border-strong:  #3d3d38;
 
-  --series-olimpiade: #3987e5;
-  --series-scipap:    #d95926;
-  --series-pubpos:    #199e70;
-  --series-debate:    #c98500;
-  --series-wtf:       #d55181;
+  --series-olimpiade: #5da2f0;
+  --series-scipap:    #f2813f;
+  --series-pubpos:    #34c295;
+  --series-debate:    #e0ad2e;
+  --series-wtf:       #ef7ba3;
+
+  --good-fg:  #6ddc8c;  --good-bg:  #16301e;  --good-bd:  #2c5c39;
+  --warn-fg:  #f4c451;  --warn-bg:  #332a12;  --warn-bd:  #5e4b1c;
+  --crit-fg:  #ff8f84;  --crit-bg:  #361e1c;  --crit-bd:  #63332f;
+
+  --track:    #2b2b28;
+  --shadow:   0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
 }
 
 * { box-sizing: border-box; }
+html, body { background: var(--page); }
 body {
   margin: 0;
-  background: var(--surface-2);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  color: var(--text-primary);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
-.viz-root { background: var(--surface-2); min-height: 100vh; padding-bottom: 48px; }
+h1, h2, h3 { color: var(--text-strong); margin: 0; }
+svg text { font-family: inherit; }
+.tnum { font-variant-numeric: tabular-nums; }
 
-.page-header {
-  padding: 28px 20px 20px;
-  max-width: 1100px;
-  margin: 0 auto;
+.viz-root { background: var(--page); min-height: 100vh; padding-bottom: 56px; }
+.container { max-width: 1140px; margin: 0 auto; padding: 0 20px; }
+
+/* ---------- Header ---------- */
+.page-header { max-width: 1140px; margin: 0 auto; padding: 30px 20px 22px; }
+.header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.page-header h1 {
+  font-size: clamp(21px, 3.2vw, 27px);
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  margin-bottom: 5px;
 }
-.page-header h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
-.page-header .sub { color: var(--text-secondary); font-size: 14px; margin: 0; }
-.page-header .meta { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; color: var(--text-muted); }
+.page-header h1 .accent { color: var(--series-olimpiade); }
+.page-header .sub { color: var(--text); font-size: 14px; margin: 0; max-width: 60ch; }
+.page-header .meta { display: flex; gap: 8px 18px; flex-wrap: wrap; margin-top: 12px; font-size: 12.5px; color: var(--text-muted); }
 .meta-item { display: flex; align-items: center; gap: 6px; }
-.dot-live { width: 7px; height: 7px; border-radius: 50%; background: var(--status-good); display: inline-block; animation: pulse 2s infinite; }
-@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.4;} }
+.dot-live { width: 7px; height: 7px; border-radius: 50%; background: var(--good-fg); display: inline-block; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.35;} }
+.header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.btn {
+  font: inherit; font-size: 12.5px; font-weight: 550;
+  padding: 7px 13px; border-radius: 9px;
+  border: 1px solid var(--border-strong);
+  background: var(--card); color: var(--text);
+  cursor: pointer; white-space: nowrap;
+}
+.btn:hover { background: var(--card-sunken); color: var(--text-strong); }
 
-.container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
-
-/* Overall hero */
+/* ---------- Hero ---------- */
 .hero-card {
-  background: var(--surface-1);
+  background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 24px 28px;
-  margin-bottom: 20px;
-  display: flex;
-  align-items: center;
-  gap: 32px;
-  flex-wrap: wrap;
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 24px 26px;
+  margin-bottom: 26px;
 }
-.hero-figure { font-size: 48px; font-weight: 700; line-height: 1; white-space: nowrap; }
-.hero-figure .of { font-size: 22px; font-weight: 500; color: var(--text-secondary); }
-.hero-label { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
-.hero-bar-wrap { flex: 1; min-width: 220px; }
-.hero-bar-track { height: 14px; border-radius: 7px; background: var(--seq-100); overflow: hidden; position: relative; }
-.hero-bar-fill { height: 100%; border-radius: 7px; background: linear-gradient(90deg, var(--seq-250), var(--seq-400)); transition: width 0.6s ease; }
-.hero-bar-labels { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--text-muted); }
-.hero-stats { display: flex; gap: 24px; flex-wrap: wrap; }
-.hero-stat { font-size: 13px; color: var(--text-secondary); }
-.hero-stat strong { display: block; font-size: 18px; color: var(--text-primary); font-weight: 700; }
+.hero-grid { display: grid; grid-template-columns: minmax(200px, auto) 1fr minmax(210px, auto); gap: 26px; align-items: center; }
+@media (max-width: 860px) { .hero-grid { grid-template-columns: 1fr; gap: 20px; } }
+.eyebrow {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-muted); margin-bottom: 7px;
+}
+.hero-figure { font-size: clamp(38px, 6vw, 52px); font-weight: 760; line-height: 1; letter-spacing: -0.03em; color: var(--text-strong); white-space: nowrap; }
+.hero-figure .of { font-size: 0.42em; font-weight: 550; color: var(--text-muted); letter-spacing: 0; }
+.hero-label { font-size: 13px; color: var(--text); margin-top: 9px; }
+.hero-label b { color: var(--text-strong); font-weight: 650; }
+.hero-bar-track { height: 16px; border-radius: 8px; background: var(--track); overflow: hidden; }
+.hero-bar-fill { height: 100%; border-radius: 8px; background: linear-gradient(90deg, var(--series-olimpiade), var(--series-pubpos)); transition: width .6s ease; }
+.hero-bar-labels { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--text-muted); }
+.hero-bar-labels b { color: var(--text-strong); font-weight: 700; font-size: 13px; }
 
-/* KPI grid */
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 14px;
-  margin-bottom: 22px;
+/* Kotak sorotan "berapa orang per hari" */
+.pace-box {
+  border-radius: 13px; padding: 13px 16px 12px;
+  border: 1px solid var(--pace-bd, var(--border-strong));
+  background: var(--pace-bg, var(--card-sunken));
+  min-width: 190px;
 }
-.kpi-card {
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px 18px;
+.pace-box { min-width: 0; }
+.pace-box.tone-good { --pace-fg: var(--good-fg); --pace-bg: var(--good-bg); --pace-bd: var(--good-bd); }
+.pace-box.tone-warn { --pace-fg: var(--warn-fg); --pace-bg: var(--warn-bg); --pace-bd: var(--warn-bd); }
+.pace-box.tone-crit { --pace-fg: var(--crit-fg); --pace-bg: var(--crit-bg); --pace-bd: var(--crit-bd); }
+.pace-eyebrow {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase;
+  color: var(--pace-fg); margin-bottom: 3px;
+}
+.pace-figure {
+  font-size: 34px; font-weight: 780; line-height: 1.05; letter-spacing: -0.03em;
+  color: var(--pace-fg);
+}
+.pace-figure .unit { font-size: 14px; font-weight: 650; letter-spacing: 0; margin-left: 4px; }
+.pace-sub { font-size: 11.5px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pace-fg); opacity: .85; }
+.pace-note { font-size: 11.5px; color: var(--text-muted); margin-top: 7px; border-top: 1px solid var(--pace-bd); padding-top: 6px; }
+.pace-note b { color: var(--text-strong); font-weight: 650; }
+
+/* ---------- Section heading ---------- */
+.section-head { margin: 4px 0 14px; }
+.section-head h2 { font-size: 17px; font-weight: 720; letter-spacing: -0.015em; }
+.section-head p { font-size: 13px; color: var(--text); margin: 4px 0 0; max-width: 72ch; }
+.section-head p b { color: var(--text-strong); font-weight: 650; }
+mark.hl {
+  background: var(--warn-bg); color: var(--warn-fg);
+  padding: 1px 5px; border-radius: 5px; font-weight: 650;
+}
+
+/* ---------- Satu baris = satu cabang lomba ---------- */
+.branch-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 26px; }
+.branch-row {
   position: relative;
-}
-.kpi-top { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; margin-bottom: 10px; }
-.kpi-name { font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 7px; white-space: nowrap; }
-.kpi-swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
-.status-pill {
-  font-size: 10.5px; font-weight: 600; padding: 3px 8px; border-radius: 999px;
-  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
-}
-.status-pill .ic { width: 6px; height: 6px; border-radius: 50%; }
-.pill-good { background: rgba(12,163,12,0.14); color: var(--status-good); }
-.pill-warn { background: rgba(236,131,90,0.16); color: #b5502a; }
-.pill-crit { background: rgba(208,59,59,0.14); color: var(--status-critical); }
-@media (prefers-color-scheme: dark) {
-  :root:where(:not([data-theme="light"])) .pill-warn { color: var(--status-serious); }
-}
-:root[data-theme="dark"] .pill-warn { color: var(--status-serious); }
-
-.kpi-value { font-size: 26px; font-weight: 700; margin-bottom: 2px; }
-.kpi-value .kpi-target { font-size: 14px; font-weight: 500; color: var(--text-secondary); }
-.kpi-bar-track { height: 8px; border-radius: 4px; background: var(--gridline); overflow: hidden; margin: 10px 0 8px; }
-.kpi-bar-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
-.kpi-footer { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--text-muted); }
-.kpi-footer .gap-warn { color: var(--status-critical); font-weight: 600; }
-.kpi-footer .gap-ok { color: var(--status-good); font-weight: 600; }
-
-/* Chart cards */
-.chart-card {
-  background: var(--surface-1);
+  background: var(--card);
   border: 1px solid var(--border);
+  border-left: 4px solid var(--c);
   border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 18px 20px;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 272px;
+  gap: 22px;
+  align-items: center;
+}
+@media (max-width: 900px) {
+  .branch-row { grid-template-columns: 68px minmax(0, 1fr); gap: 16px; }
+  .branch-row .br-pace { grid-column: 1 / -1; }
+  .br-donut .d-pct { font-size: 16px; }
+  .br-donut .d-word { font-size: 7.5px; }
+}
+@media (max-width: 400px) {
+  .branch-row { grid-template-columns: 58px minmax(0, 1fr); gap: 12px; padding: 15px 14px; }
+  .br-donut .d-pct { font-size: 13.5px; }
+  .br-donut .d-word { display: none; }
+}
+.br-donut { position: relative; line-height: 0; width: 100%; }
+.br-donut svg { width: 100%; height: auto; display: block; }
+.br-donut .d-caption {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; line-height: 1.1; pointer-events: none;
+}
+.br-donut .d-pct { font-size: 20px; font-weight: 760; letter-spacing: -0.02em; color: var(--text-strong); }
+.br-donut .d-word { font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+
+.br-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 7px; }
+.br-name { font-size: 15.5px; font-weight: 720; letter-spacing: -0.01em; color: var(--text-strong); }
+.status-pill {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 999px; display: inline-flex; align-items: center; gap: 5px;
+  white-space: nowrap; border: 1px solid transparent;
+}
+.status-pill .ic { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill-good { background: var(--good-bg); color: var(--good-fg); border-color: var(--good-bd); }
+.pill-warn { background: var(--warn-bg); color: var(--warn-fg); border-color: var(--warn-bd); }
+.pill-crit { background: var(--crit-bg); color: var(--crit-fg); border-color: var(--crit-bd); }
+
+.br-count { font-size: 13px; color: var(--text-muted); margin-bottom: 9px; }
+.br-count .big { font-size: 25px; font-weight: 760; letter-spacing: -0.025em; color: var(--text-strong); margin-right: 2px; }
+.br-count .of { font-weight: 600; color: var(--text); }
+
+.br-bar-track { height: 10px; border-radius: 5px; background: var(--track); overflow: hidden; }
+.br-bar-fill { height: 100%; border-radius: 5px; background: var(--c); transition: width .6s ease; }
+.br-meta { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 10px; }
+.chip {
+  font-size: 11.5px; padding: 3px 9px; border-radius: 7px;
+  background: var(--card-sunken); border: 1px solid var(--border);
+  color: var(--text-muted); white-space: nowrap;
+}
+.chip b { color: var(--text-strong); font-weight: 650; }
+.chip.chip-alert { background: var(--crit-bg); border-color: var(--crit-bd); color: var(--crit-fg); }
+.chip.chip-alert b { color: var(--crit-fg); }
+.chip.chip-ok { background: var(--good-bg); border-color: var(--good-bd); color: var(--good-fg); }
+.chip.chip-ok b { color: var(--good-fg); }
+
+/* ---------- Chart cards ---------- */
+.chart-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
   padding: 20px 22px 16px;
   margin-bottom: 18px;
 }
-.chart-card h2 { font-size: 15px; font-weight: 700; margin: 0 0 2px; }
-.chart-card .chart-sub { font-size: 12.5px; color: var(--text-secondary); margin: 0 0 14px; }
-.charts-row { display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px; }
-@media (max-width: 800px) { .charts-row { grid-template-columns: 1fr; } }
+.chart-card h2 { font-size: 16px; font-weight: 720; letter-spacing: -0.015em; margin-bottom: 3px; }
+.chart-card .chart-sub { font-size: 12.5px; color: var(--text); margin: 0 0 14px; }
+.chart-card .chart-sub b { color: var(--text-strong); font-weight: 650; }
 
-.legend { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; font-size: 12px; color: var(--text-secondary); }
+.legend { display: flex; gap: 8px 16px; flex-wrap: wrap; margin-bottom: 12px; font-size: 12px; color: var(--text); }
 .legend-item { display: flex; align-items: center; gap: 6px; }
-.legend-key { width: 14px; height: 3px; border-radius: 2px; }
+.legend-key { width: 15px; height: 3px; border-radius: 2px; }
 
-svg text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
 .axis-label { fill: var(--text-muted); font-size: 10.5px; }
 .gridline { stroke: var(--gridline); stroke-width: 1; }
 .baseline { stroke: var(--baseline); stroke-width: 1; }
 
 .tooltip {
-  position: absolute;
-  pointer-events: none;
-  background: var(--text-primary);
-  color: var(--surface-1);
-  font-size: 12px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  opacity: 0;
-  transition: opacity 0.1s;
-  z-index: 10;
-  white-space: nowrap;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  position: absolute; pointer-events: none;
+  background: var(--text-strong); color: var(--card);
+  font-size: 12px; padding: 9px 11px; border-radius: 9px;
+  opacity: 0; transition: opacity .1s; z-index: 10; white-space: nowrap;
+  box-shadow: 0 6px 22px rgba(0,0,0,.28);
 }
-.tooltip .t-title { font-weight: 700; margin-bottom: 4px; }
+.tooltip .t-title { font-weight: 700; margin-bottom: 5px; }
 .tooltip .t-row { display: flex; align-items: center; gap: 6px; }
-.tooltip .t-key { width: 8px; height: 8px; border-radius: 2px; }
-.tooltip .t-val { font-weight: 700; margin-left: auto; padding-left: 10px; }
+.tooltip .t-key { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.tooltip .t-val { font-weight: 700; margin-left: auto; padding-left: 12px; font-variant-numeric: tabular-nums; }
 
-.donut-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
-.donut-item { text-align: center; }
-.donut-item .d-label { font-size: 12px; font-weight: 600; margin-top: 6px; }
-.donut-item .d-value { font-size: 11.5px; color: var(--text-secondary); }
-
+/* ---------- Table ---------- */
 .table-view { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 6px; }
-.table-view th { text-align: left; color: var(--text-muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; padding: 6px 10px; border-bottom: 1px solid var(--gridline); }
-.table-view td { padding: 8px 10px; border-bottom: 1px solid var(--gridline); font-variant-numeric: tabular-nums; }
+.table-view th { text-align: left; color: var(--text-muted); font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+.table-view td { padding: 8px 10px; border-bottom: 1px solid var(--gridline); font-variant-numeric: tabular-nums; color: var(--text); }
+.table-view td:first-child { color: var(--text-strong); font-weight: 600; }
 .table-view tr:last-child td { border-bottom: none; }
-details.table-toggle { margin-top: 4px; }
-details.table-toggle summary { cursor: pointer; font-size: 12.5px; color: var(--text-secondary); padding: 4px 0; }
+details.table-toggle { margin-top: 6px; }
+details.table-toggle summary { cursor: pointer; font-size: 12.5px; color: var(--text-muted); padding: 5px 0; }
+details.table-toggle summary:hover { color: var(--text-strong); }
 
 .state-banner {
-  background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
-  padding: 14px 18px; font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 18px; font-size: 13px; color: var(--text); margin-bottom: 16px;
   display: none; align-items: center; gap: 8px;
 }
 .state-banner.show { display: flex; }
-.state-banner.error { color: var(--status-critical); }
+.state-banner.error { background: var(--crit-bg); border-color: var(--crit-bd); color: var(--crit-fg); }
 
-.footer-note { text-align: center; font-size: 11.5px; color: var(--text-muted); margin-top: 20px; }
-.refresh-btn {
-  font-size: 12px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border);
-  background: var(--surface-1); color: var(--text-secondary); cursor: pointer; font-family: inherit;
-}
-.refresh-btn:hover { background: var(--gridline); }
-.header-actions { display:flex; align-items:center; gap:10px; margin-top: 10px; }
+.footer-note { text-align: center; font-size: 11.5px; color: var(--text-muted); margin-top: 22px; line-height: 1.6; }
+
+.skeleton { background: var(--card-sunken); border-radius: 12px; height: 108px; animation: sk 1.4s ease-in-out infinite; }
+@keyframes sk { 0%,100%{opacity:.55;} 50%{opacity:.9;} }
 </style>
+</head>
+<body>
 
 <div class="viz-root">
   <div class="page-header">
-    <h1>MEDSPIN 2026 — Progress Pendaftaran</h1>
-    <p class="sub">Dashboard live untuk panitia — data diambil langsung dari Google Sheet, update otomatis.</p>
-    <div class="meta">
-      <span class="meta-item"><span class="dot-live"></span> <span id="live-status">Menghubungkan ke data...</span></span>
-      <span class="meta-item" id="snapshot-date-label"></span>
-    </div>
-    <div class="header-actions">
-      <button class="refresh-btn" id="refresh-btn">↻ Muat ulang data</button>
+    <div class="header-row">
+      <div>
+        <h1>MEDSPIN 2026 — <span class="accent">Progress Pendaftaran</span></h1>
+        <p class="sub">Dashboard live panitia. Data ditarik langsung dari Google Sheet dan <b>diperbarui otomatis</b> setiap halaman dibuka.</p>
+        <div class="meta">
+          <span class="meta-item"><span class="dot-live"></span> <span id="live-status">Menghubungkan ke data…</span></span>
+          <span class="meta-item" id="snapshot-date-label"></span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="btn" id="theme-btn" type="button" aria-label="Ganti tema terang / gelap">🌙 Mode gelap</button>
+        <button class="btn" id="refresh-btn" type="button">↻ Muat ulang</button>
+      </div>
     </div>
   </div>
 
   <div class="container">
     <div class="state-banner" id="state-banner"></div>
 
-    <!-- Hero: overall -->
-    <div class="hero-card" id="hero-card"></div>
+    <!-- Ringkasan keseluruhan -->
+    <div class="hero-card" id="hero-card"><div class="skeleton"></div></div>
 
-    <!-- KPI cards per category -->
-    <div class="kpi-grid" id="kpi-grid"></div>
+    <!-- Satu baris penuh = satu cabang lomba -->
+    <div class="section-head">
+      <h2>Rincian per cabang lomba</h2>
+      <p><b>Satu baris = satu cabang</b>, lengkap dari komposisi, perolehan, sampai kecepatan pendaftaran.
+         Angka yang disorot adalah <mark class="hl">jumlah orang yang harus masuk setiap hari</mark> supaya target cabang itu tercapai tepat waktu.</p>
+    </div>
+    <div class="branch-list" id="branch-list">
+      <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+    </div>
 
-    <!-- Trend chart -->
+    <!-- Tren harian -->
     <div class="chart-card">
       <h2>Tren pendaftaran kumulatif per hari</h2>
-      <p class="chart-sub">Garis putus-putus menandakan target tiap cabang. Arahkan kursor untuk lihat detail per tanggal.</p>
+      <p class="chart-sub">Garis putus-putus = <b>target tiap cabang</b>. Arahkan kursor untuk melihat angka per tanggal.</p>
       <div class="legend" id="trend-legend"></div>
       <div style="position:relative;">
-        <svg id="trend-chart" style="width:100%; height:320px; display:block;"></svg>
+        <svg id="trend-chart" style="width:100%; height:330px; display:block;"></svg>
         <div class="tooltip" id="trend-tooltip"></div>
       </div>
       <details class="table-toggle">
-        <summary>Lihat sebagai tabel</summary>
+        <summary>Lihat sebagai tabel (14 hari terakhir)</summary>
         <div style="overflow-x:auto;"><table class="table-view" id="trend-table"></table></div>
       </details>
-    </div>
-
-    <div class="charts-row">
-      <!-- Bar chart: current vs target -->
-      <div class="chart-card">
-        <h2>Perolehan saat ini vs target</h2>
-        <p class="chart-sub">Batang penuh = target. Arahkan kursor untuk detail.</p>
-        <div style="position:relative;">
-          <svg id="bar-chart" style="width:100%; height:260px; display:block;"></svg>
-          <div class="tooltip" id="bar-tooltip"></div>
-        </div>
-      </div>
-
-      <!-- Donut charts -->
-      <div class="chart-card">
-        <h2>Komposisi per cabang</h2>
-        <p class="chart-sub">Terdaftar vs sisa menuju target.</p>
-        <div class="donut-grid" id="donut-grid"></div>
-      </div>
     </div>
 
     <p class="footer-note" id="footer-note"></p>
@@ -294,29 +362,75 @@ details.table-toggle summary { cursor: pointer; font-size: 12.5px; color: var(--
   const GVIZ = (sheet) => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheet)}`;
 
   const CATEGORY_COLOR = {
-    "Olimpiade": "var(--series-olimpiade)",
-    "Scientific Paper": "var(--series-scipap)",
-    "Public Poster": "var(--series-pubpos)",
-    "Debate": "var(--series-debate)",
-    "WTF": "var(--series-wtf)"
+    "Olimpiade": "--series-olimpiade",
+    "Scientific Paper": "--series-scipap",
+    "Public Poster": "--series-pubpos",
+    "Debate": "--series-debate",
+    "WTF": "--series-wtf"
   };
   const CATEGORY_ORDER = ["Olimpiade", "Scientific Paper", "Public Poster", "Debate", "WTF"];
+  const CATEGORY_SHORT = {
+    "Olimpiade": "Olimpiade",
+    "Scientific Paper": "Sci. Paper",
+    "Public Poster": "Poster",
+    "Debate": "Debate",
+    "WTF": "WTF"
+  };
 
-  function resolveVar(v) {
-    if (!v.startsWith("var(")) return v;
-    const name = v.slice(4, -1);
-    return getComputedStyle(document.querySelector(".viz-root")).getPropertyValue(name).trim();
+  const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const catColor = (cat) => cssVar(CATEGORY_COLOR[cat] || "--text-muted");
+
+  /* ---------- Tema ---------- */
+  function currentTheme() { return document.documentElement.getAttribute("data-theme") || "light"; }
+  function applyThemeLabel() {
+    const btn = document.getElementById("theme-btn");
+    btn.textContent = currentTheme() === "dark" ? "☀ Mode terang" : "🌙 Mode gelap";
   }
+  function toggleTheme() {
+    const next = currentTheme() === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    try { localStorage.setItem("medspin-theme", next); } catch (e) {}
+    applyThemeLabel();
+    rerenderAll();
+  }
+
+  /* ---------- Util ---------- */
+  function parsePercent(v) {
+    if (typeof v === "number") return v <= 1 ? v * 100 : v;
+    if (typeof v === "string") return parseFloat(v.replace("%", "").trim()) || 0;
+    return 0;
+  }
+  function num(v) {
+    if (typeof v === "number") return v;
+    if (typeof v === "string") return parseFloat(v.replace(/\./g, "").replace(/,/g, ".").replace(/[^\d.\-]/g, "")) || 0;
+    return 0;
+  }
+  const fmtInt = (n) => Math.round(n).toLocaleString("id-ID");
+  const fmtDec = (n) => Number(n).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  function fmtDate(v) {
+    if (v instanceof Date) return v;
+    if (typeof v === "string" && /^Date\(/.test(v)) {
+      const m = v.match(/Date\((\d+),(\d+),(\d+)/);
+      if (m) return new Date(+m[1], +m[2], +m[3]);
+    }
+    if (typeof v === "string") { const d = new Date(v); if (!isNaN(d)) return d; }
+    return null;
+  }
+  const fmtDateShort = (d) => d.toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
+  const escapeHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const svgEl = (tag) => document.createElementNS("http://www.w3.org/2000/svg", tag);
 
   function statusPillClass(status) {
-    if (/target met|on track|good/i.test(status)) return "pill-good";
-    if (/below pace/i.test(status)) return "pill-warn";
+    if (/target met|on track|ahead|good|aman/i.test(status)) return "pill-good";
+    if (/critical|behind|urgent|danger/i.test(status)) return "pill-crit";
     return "pill-warn";
   }
-  function statusIconColor(status) {
-    if (/target met|on track|good/i.test(status)) return "var(--status-good)";
-    if (/below pace/i.test(status)) return "var(--status-serious)";
-    return "var(--status-warning)";
+  // Nada warna kotak "orang per hari": bandingkan kebutuhan vs kecepatan nyata.
+  function paceTone(requiredPace, avgPace, remaining) {
+    if (remaining <= 0) return "tone-good";
+    if (avgPace > 0 && requiredPace <= avgPace) return "tone-good";
+    if (avgPace > 0 && requiredPace <= avgPace * 1.5) return "tone-warn";
+    return "tone-crit";
   }
 
   async function fetchGviz(sheetName) {
@@ -329,224 +443,148 @@ details.table-toggle summary { cursor: pointer; font-size: 12.5px; color: var(--
     const rows = data.table.rows.map(r => r.c.map(c => (c ? (c.f !== undefined && c.f !== null ? c.f : c.v) : null)));
     return { cols, rows };
   }
-
   function toObjects(cols, rows) {
-    return rows.map(r => {
-      const o = {};
-      cols.forEach((c, i) => o[c] = r[i]);
-      return o;
-    });
-  }
-
-  function parsePercent(v) {
-    if (typeof v === "number") return v <= 1 ? v * 100 : v;
-    if (typeof v === "string") return parseFloat(v.replace("%", "").trim());
-    return 0;
-  }
-  function num(v) {
-    if (typeof v === "number") return v;
-    if (typeof v === "string") return parseFloat(v.replace(/,/g, "")) || 0;
-    return 0;
-  }
-  function fmtInt(n) { return Math.round(n).toLocaleString("id-ID"); }
-  function fmtDate(v) {
-    if (v instanceof Date) return v;
-    if (typeof v === "string" && /^Date\(/.test(v)) {
-      const m = v.match(/Date\((\d+),(\d+),(\d+)/);
-      if (m) return new Date(+m[1], +m[2], +m[3]);
-    }
-    if (typeof v === "string") {
-      const d = new Date(v);
-      if (!isNaN(d)) return d;
-    }
-    return null;
-  }
-  function fmtDateShort(d) {
-    return d.toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
-  }
-
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    return rows.map(r => { const o = {}; cols.forEach((c, i) => o[c] = r[i]); return o; });
   }
 
   const state = { current: null, trend: null, donut: null };
 
+  /* ---------- Hero ---------- */
   function renderHero(currentRows) {
     const overall = currentRows.find(r => r.Category === "Overall");
-    if (!overall) return;
-    const current = num(overall.Current), target = num(overall.Target), progress = parsePercent(overall.Progress);
-    const daysLeft = num(overall["Days Left"]);
     const hero = document.getElementById("hero-card");
+    if (!overall) { hero.innerHTML = ""; return; }
+
+    const current = num(overall.Current), target = num(overall.Target);
+    const progress = parsePercent(overall.Progress);
+    const remaining = num(overall.Remaining);
+    const daysLeft = num(overall["Days Left"]);
+    const requiredPace = num(overall["Required Pace"]);
+    const avgPace = num(overall["7D Avg / Day"]);
+    const tone = paceTone(requiredPace, avgPace, remaining);
+
     hero.innerHTML = `
-      <div>
-        <div class="hero-figure">${fmtInt(current)}<span class="of"> / ${fmtInt(target)}</span></div>
-        <div class="hero-label">Total peserta terdaftar (semua cabang) · ${daysLeft} hari lagi menuju deadline terdekat</div>
-      </div>
-      <div class="hero-bar-wrap">
-        <div class="hero-bar-track"><div class="hero-bar-fill" style="width:${Math.min(progress,100)}%"></div></div>
-        <div class="hero-bar-labels"><span>${progress.toFixed(1)}% tercapai</span><span>Target: ${fmtInt(target)}</span></div>
-      </div>
-      <div class="hero-stats">
-        <div class="hero-stat"><strong>${fmtInt(num(overall.Remaining))}</strong>Kekurangan peserta</div>
-        <div class="hero-stat"><strong>${num(overall["Required Pace"]).toFixed(1)}/hari</strong>Pace dibutuhkan</div>
+      <div class="hero-grid">
+        <div>
+          <div class="eyebrow">Total seluruh cabang</div>
+          <div class="hero-figure tnum">${fmtInt(current)}<span class="of"> / ${fmtInt(target)}</span></div>
+          <div class="hero-label">peserta terdaftar · <b>${fmtInt(daysLeft)} hari</b> menuju deadline terdekat</div>
+        </div>
+        <div>
+          <div class="eyebrow">Capaian terhadap target</div>
+          <div class="hero-bar-track"><div class="hero-bar-fill" style="width:${Math.min(Math.max(progress, 0), 100)}%"></div></div>
+          <div class="hero-bar-labels">
+            <span><b class="tnum">${fmtDec(progress)}%</b> tercapai</span>
+            <span>${remaining > 0 ? "masih kurang <b class=\"tnum\">" + fmtInt(remaining) + "</b> peserta" : "<b>target terpenuhi</b>"}</span>
+          </div>
+        </div>
+        <div class="pace-box ${tone}">
+          <div class="pace-eyebrow">Butuh masuk</div>
+          <div class="pace-figure tnum">${fmtDec(requiredPace)}<span class="unit">orang</span></div>
+          <div class="pace-sub">setiap hari</div>
+          <div class="pace-note">Kecepatan 7 hari terakhir: <b class="tnum">${fmtDec(avgPace)}/hari</b></div>
+        </div>
       </div>
     `;
   }
 
-  function renderKpiGrid(currentRows) {
-    const grid = document.getElementById("kpi-grid");
-    grid.innerHTML = "";
+  /* ---------- Donut kecil per cabang ---------- */
+  function donutMarkup(progress, color, size) {
+    const r = size / 2 - 7, circ = 2 * Math.PI * r;
+    const pct = Math.min(Math.max(progress, 0), 100);
+    const dash = (pct / 100) * circ;
+    return `
+      <svg viewBox="0 0 ${size} ${size}" role="img" aria-label="${fmtDec(pct)} persen dari target">
+        <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${cssVar('--track')}" stroke-width="11"/>
+        <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="11"
+          stroke-dasharray="${dash} ${circ - dash}" stroke-linecap="round"
+          transform="rotate(-90 ${size / 2} ${size / 2})"/>
+      </svg>
+      <div class="d-caption">
+        <span class="d-pct tnum">${Math.round(pct)}%</span>
+        <span class="d-word">tercapai</span>
+      </div>
+    `;
+  }
+
+  /* ---------- SATU BARIS PENUH = SATU CABANG LOMBA ---------- */
+  function renderBranchRows(currentRows, donutRows) {
+    const list = document.getElementById("branch-list");
+    list.innerHTML = "";
+
     CATEGORY_ORDER.forEach(cat => {
       const row = currentRows.find(r => r.Category === cat);
       if (!row) return;
-      const current = num(row.Current), target = num(row.Target), progress = parsePercent(row.Progress);
-      const remaining = num(row.Remaining);
+
+      let current = num(row.Current), target = num(row.Target);
+      // Kalau sheet Donut tersedia, pakai untuk verifikasi total (Registered + Remaining).
+      if (donutRows && donutRows.length) {
+        const reg = donutRows.find(r => r.Category === cat && r.Segment === "Registered");
+        const rem = donutRows.find(r => r.Category === cat && r.Segment === "Remaining");
+        if (reg) {
+          current = num(reg.Value);
+          const tot = current + (rem ? num(rem.Value) : 0);
+          if (tot > 0) target = tot;
+        }
+      }
+      const progress = target > 0 ? (current / target) * 100 : parsePercent(row.Progress);
+      const remaining = Math.max(num(row.Remaining) || (target - current), 0);
       const requiredPace = num(row["Required Pace"]);
       const avgPace = num(row["7D Avg / Day"]);
+      const daysLeft = num(row["Days Left"]);
       const status = row.Status || "";
-      const color = CATEGORY_COLOR[cat];
-      const gapClass = requiredPace > avgPace ? "gap-warn" : "gap-ok";
-      const card = document.createElement("div");
-      card.className = "kpi-card";
-      card.innerHTML = `
-        <div class="kpi-top">
-          <div class="kpi-name"><span class="kpi-swatch" style="background:${color}"></span>${escapeHtml(cat)}</div>
-          <span class="status-pill ${statusPillClass(status)}"><span class="ic" style="background:${statusIconColor(status)}"></span>${escapeHtml(status)}</span>
+      const color = catColor(cat);
+      const tone = paceTone(requiredPace, avgPace, remaining);
+      const behind = remaining > 0 && avgPace > 0 && requiredPace > avgPace;
+
+      const art = document.createElement("article");
+      art.className = "branch-row";
+      art.style.setProperty("--c", color);
+      art.innerHTML = `
+        <div class="br-donut">${donutMarkup(progress, color, 92)}</div>
+
+        <div class="br-main">
+          <div class="br-head">
+            <span class="br-name">${escapeHtml(cat)}</span>
+            ${status ? `<span class="status-pill ${statusPillClass(status)}"><span class="ic"></span>${escapeHtml(status)}</span>` : ""}
+          </div>
+          <div class="br-count">
+            <span class="big tnum">${fmtInt(current)}</span><span class="of"> dari ${fmtInt(target)} peserta</span>
+          </div>
+          <div class="br-bar-track"><div class="br-bar-fill" style="width:${Math.min(Math.max(progress, 0), 100)}%"></div></div>
+          <div class="br-meta">
+            <span class="chip ${remaining > 0 ? "chip-alert" : "chip-ok"}">${remaining > 0 ? `kurang <b class="tnum">${fmtInt(remaining)}</b> peserta` : `<b>target tercapai</b>`}</span>
+            <span class="chip">sisa <b class="tnum">${fmtInt(daysLeft)}</b> hari</span>
+            <span class="chip">rata-rata masuk <b class="tnum">${fmtDec(avgPace)}</b>/hari</span>
+            <span class="chip">capaian <b class="tnum">${fmtDec(progress)}%</b></span>
+          </div>
         </div>
-        <div class="kpi-value">${fmtInt(current)}<span class="kpi-target"> / ${fmtInt(target)}</span></div>
-        <div class="kpi-bar-track"><div class="kpi-bar-fill" style="width:${Math.min(progress,100)}%; background:${color}"></div></div>
-        <div class="kpi-footer">
-          <span>${progress.toFixed(1)}%</span>
-          <span class="${gapClass}">${remaining > 0 ? "kurang " + fmtInt(remaining) : "tercapai"} · butuh ${requiredPace.toFixed(1)}/hari</span>
+
+        <div class="pace-box ${tone} br-pace">
+          <div class="pace-eyebrow">Butuh masuk</div>
+          <div class="pace-figure tnum">${fmtDec(requiredPace)}<span class="unit">orang</span></div>
+          <div class="pace-sub">setiap hari</div>
+          <div class="pace-note">${
+            remaining <= 0
+              ? `Sudah <b>melewati target</b> — jaga momentum.`
+              : behind
+                ? `Sekarang baru <b class="tnum">${fmtDec(avgPace)}/hari</b> — <b>kurang ${fmtDec(requiredPace - avgPace)} orang/hari</b>.`
+                : `Sekarang <b class="tnum">${fmtDec(avgPace)}/hari</b> — <b>laju sudah cukup</b>.`
+          }</div>
         </div>
       `;
-      grid.appendChild(card);
+      list.appendChild(art);
     });
   }
 
-  function renderDonuts(donutRows) {
-    const grid = document.getElementById("donut-grid");
-    grid.innerHTML = "";
-    CATEGORY_ORDER.forEach(cat => {
-      const rows = donutRows.filter(r => r.Category === cat);
-      const reg = rows.find(r => r.Segment === "Registered");
-      const rem = rows.find(r => r.Segment === "Remaining");
-      if (!reg) return;
-      const regVal = num(reg.Value), remVal = rem ? num(rem.Value) : 0;
-      const total = regVal + remVal || 1;
-      const progress = (regVal / total) * 100;
-      const color = resolveVar(CATEGORY_COLOR[cat]);
-      const track = resolveVar("var(--gridline)");
-      const r = 32, circ = 2 * Math.PI * r;
-      const dash = (progress / 100) * circ;
-      const item = document.createElement("div");
-      item.className = "donut-item";
-      item.innerHTML = `
-        <svg width="84" height="84" viewBox="0 0 84 84">
-          <circle cx="42" cy="42" r="${r}" fill="none" stroke="${track}" stroke-width="10"/>
-          <circle cx="42" cy="42" r="${r}" fill="none" stroke="${color}" stroke-width="10"
-            stroke-dasharray="${dash} ${circ - dash}" stroke-linecap="round"
-            transform="rotate(-90 42 42)"/>
-          <text x="42" y="46" text-anchor="middle" font-size="15" font-weight="700" fill="${resolveVar('var(--text-primary)')}">${progress.toFixed(0)}%</text>
-        </svg>
-        <div class="d-label">${escapeHtml(cat)}</div>
-        <div class="d-value">${fmtInt(regVal)} / ${fmtInt(total)}</div>
-      `;
-      grid.appendChild(item);
-    });
-  }
-
-  function renderBarChart(currentRows) {
-    const svg = document.getElementById("bar-chart");
-    const tooltip = document.getElementById("bar-tooltip");
-    const rows = CATEGORY_ORDER.map(cat => currentRows.find(r => r.Category === cat)).filter(Boolean);
-    const W = svg.clientWidth || 480, H = 260;
-    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-    svg.innerHTML = "";
-    const marginL = 46, marginR = 12, marginT = 10, marginB = 34;
-    const plotW = W - marginL - marginR, plotH = H - marginT - marginB;
-    const maxVal = Math.max(...rows.map(r => num(r.Target))) * 1.08;
-    const bandW = plotW / rows.length;
-    const barW = Math.min(56, bandW * 0.44);
-    const gap = 3;
-
-    const yTicks = 4;
-    for (let i = 0; i <= yTicks; i++) {
-      const v = (maxVal / yTicks) * i;
-      const y = marginT + plotH - (v / maxVal) * plotH;
-      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      line.setAttribute("x1", marginL); line.setAttribute("x2", W - marginR);
-      line.setAttribute("y1", y); line.setAttribute("y2", y);
-      line.setAttribute("class", "gridline");
-      svg.appendChild(line);
-      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      label.setAttribute("x", marginL - 8); label.setAttribute("y", y + 3);
-      label.setAttribute("text-anchor", "end"); label.setAttribute("class", "axis-label");
-      label.textContent = fmtInt(v);
-      svg.appendChild(label);
-    }
-
-    rows.forEach((row, i) => {
-      const cx = marginL + bandW * i + bandW / 2;
-      const current = num(row.Current), target = num(row.Target);
-      const color = resolveVar(CATEGORY_COLOR[row.Category]);
-      const trackColor = resolveVar("var(--gridline)");
-
-      const targetH = (target / maxVal) * plotH;
-      const targetRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      targetRect.setAttribute("x", cx - barW / 2 - gap - barW / 2);
-      targetRect.setAttribute("y", marginT + plotH - targetH);
-      targetRect.setAttribute("width", barW);
-      targetRect.setAttribute("height", Math.max(targetH, 1));
-      targetRect.setAttribute("rx", 4);
-      targetRect.setAttribute("fill", trackColor);
-      svg.appendChild(targetRect);
-
-      const curH = (current / maxVal) * plotH;
-      const curRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      curRect.setAttribute("x", cx + gap / 2);
-      curRect.setAttribute("y", marginT + plotH - curH);
-      curRect.setAttribute("width", barW);
-      curRect.setAttribute("height", Math.max(curH, 1));
-      curRect.setAttribute("rx", 4);
-      curRect.setAttribute("fill", color);
-      curRect.style.cursor = "pointer";
-      svg.appendChild(curRect);
-
-      [targetRect, curRect].forEach(rect => {
-        rect.addEventListener("pointermove", (e) => {
-          const bbox = svg.getBoundingClientRect();
-          tooltip.style.opacity = 1;
-          tooltip.style.left = (e.clientX - bbox.left + 12) + "px";
-          tooltip.style.top = (e.clientY - bbox.top - 10) + "px";
-          tooltip.innerHTML = `<div class="t-title">${escapeHtml(row.Category)}</div>
-            <div class="t-row"><span class="t-key" style="background:${color}"></span>Saat ini<span class="t-val">${fmtInt(current)}</span></div>
-            <div class="t-row"><span class="t-key" style="background:${trackColor}"></span>Target<span class="t-val">${fmtInt(target)}</span></div>`;
-        });
-        rect.addEventListener("pointerleave", () => tooltip.style.opacity = 0);
-      });
-
-      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      label.setAttribute("x", cx); label.setAttribute("y", H - marginB + 18);
-      label.setAttribute("text-anchor", "middle"); label.setAttribute("class", "axis-label");
-      label.textContent = row.Category.length > 10 ? row.Category.split(" ")[0] : row.Category;
-      svg.appendChild(label);
-    });
-
-    const baseline = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    baseline.setAttribute("x1", marginL); baseline.setAttribute("x2", W - marginR);
-    baseline.setAttribute("y1", marginT + plotH); baseline.setAttribute("y2", marginT + plotH);
-    baseline.setAttribute("class", "baseline");
-    svg.appendChild(baseline);
-  }
-
+  /* ---------- Legend tren ---------- */
   function renderTrendLegend() {
-    const legend = document.getElementById("trend-legend");
-    legend.innerHTML = CATEGORY_ORDER.map(cat => `
-      <span class="legend-item"><span class="legend-key" style="background:${resolveVar(CATEGORY_COLOR[cat])}"></span>${escapeHtml(cat)}</span>
+    document.getElementById("trend-legend").innerHTML = CATEGORY_ORDER.map(cat => `
+      <span class="legend-item"><span class="legend-key" style="background:${catColor(cat)}"></span>${escapeHtml(cat)}</span>
     `).join("");
   }
 
+  /* ---------- Diagram garis (tetap di tempatnya) ---------- */
   function renderTrendChart(trendRows) {
     const svg = document.getElementById("trend-chart");
     const tooltip = document.getElementById("trend-tooltip");
@@ -559,94 +597,99 @@ details.table-toggle summary { cursor: pointer; font-size: 12.5px; color: var(--
     });
     CATEGORY_ORDER.forEach(cat => byCat[cat].sort((a, b) => a.date - b.date));
 
-    const allDates = byCat[CATEGORY_ORDER[0]].map(p => p.date);
+    const allDates = [...new Set(
+      CATEGORY_ORDER.flatMap(cat => byCat[cat].map(p => p.date.getTime()))
+    )].sort((a, b) => a - b).map(t => new Date(t));
     if (!allDates.length) return;
-    const W = svg.clientWidth || 700, H = 320;
+
+    const W = svg.clientWidth || 700, H = 330;
     svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
     svg.innerHTML = "";
-    const marginL = 46, marginR = 16, marginT = 12, marginB = 28;
+    const marginL = 48, marginR = 18, marginT = 14, marginB = 30;
     const plotW = W - marginL - marginR, plotH = H - marginT - marginB;
 
-    const maxTarget = Math.max(...CATEGORY_ORDER.map(cat => Math.max(...byCat[cat].map(p => p.target))));
-    const maxVal = maxTarget * 1.15;
+    const maxTarget = Math.max(1, ...CATEGORY_ORDER.map(cat => Math.max(0, ...byCat[cat].map(p => p.target))));
+    const maxSeen = Math.max(1, ...CATEGORY_ORDER.map(cat => Math.max(0, ...byCat[cat].map(p => p.value))));
+    const maxVal = Math.max(maxTarget, maxSeen) * 1.12;
     const minDate = allDates[0].getTime(), maxDate = allDates[allDates.length - 1].getTime();
     const xScale = (d) => marginL + ((d.getTime() - minDate) / (maxDate - minDate || 1)) * plotW;
     const yScale = (v) => marginT + plotH - (v / maxVal) * plotH;
 
     const yTicks = 4;
     for (let i = 0; i <= yTicks; i++) {
-      const v = (maxVal / yTicks) * i;
-      const y = yScale(v);
-      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      const v = (maxVal / yTicks) * i, y = yScale(v);
+      const line = svgEl("line");
       line.setAttribute("x1", marginL); line.setAttribute("x2", W - marginR);
       line.setAttribute("y1", y); line.setAttribute("y2", y);
       line.setAttribute("class", "gridline");
       svg.appendChild(line);
-      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      label.setAttribute("x", marginL - 8); label.setAttribute("y", y + 3);
+      const label = svgEl("text");
+      label.setAttribute("x", marginL - 9); label.setAttribute("y", y + 3.5);
       label.setAttribute("text-anchor", "end"); label.setAttribute("class", "axis-label");
       label.textContent = fmtInt(v);
       svg.appendChild(label);
     }
 
-    const dateTickCount = 6;
+    const maxTicks = W < 420 ? 3 : (W < 620 ? 4 : 6);
+    const dateTickCount = Math.min(maxTicks, allDates.length - 1) || 1;
     for (let i = 0; i <= dateTickCount; i++) {
       const t = minDate + ((maxDate - minDate) / dateTickCount) * i;
-      const x = xScale(new Date(t));
-      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      label.setAttribute("x", x); label.setAttribute("y", H - marginB + 16);
+      const label = svgEl("text");
+      label.setAttribute("x", xScale(new Date(t))); label.setAttribute("y", H - marginB + 17);
       label.setAttribute("text-anchor", "middle"); label.setAttribute("class", "axis-label");
       label.textContent = fmtDateShort(new Date(t));
       svg.appendChild(label);
     }
 
     CATEGORY_ORDER.forEach(cat => {
-      const color = resolveVar(CATEGORY_COLOR[cat]);
+      const color = catColor(cat);
       const points = byCat[cat];
       if (!points.length) return;
-      const targetY = yScale(points[0].target);
-      const dashLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      dashLine.setAttribute("x1", marginL); dashLine.setAttribute("x2", W - marginR);
-      dashLine.setAttribute("y1", targetY); dashLine.setAttribute("y2", targetY);
-      dashLine.setAttribute("stroke", color); dashLine.setAttribute("stroke-width", 1);
-      dashLine.setAttribute("stroke-dasharray", "3,4"); dashLine.setAttribute("opacity", "0.45");
-      svg.appendChild(dashLine);
 
-      const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"} ${xScale(p.date)} ${yScale(p.value)}`).join(" ");
-      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.setAttribute("d", pathD);
+      const targetVal = points[points.length - 1].target;
+      if (targetVal > 0) {
+        const targetY = yScale(targetVal);
+        const dashLine = svgEl("line");
+        dashLine.setAttribute("x1", marginL); dashLine.setAttribute("x2", W - marginR);
+        dashLine.setAttribute("y1", targetY); dashLine.setAttribute("y2", targetY);
+        dashLine.setAttribute("stroke", color); dashLine.setAttribute("stroke-width", 1);
+        dashLine.setAttribute("stroke-dasharray", "3,4"); dashLine.setAttribute("opacity", "0.42");
+        svg.appendChild(dashLine);
+      }
+
+      const path = svgEl("path");
+      path.setAttribute("d", points.map((p, i) => `${i === 0 ? "M" : "L"} ${xScale(p.date)} ${yScale(p.value)}`).join(" "));
       path.setAttribute("fill", "none");
       path.setAttribute("stroke", color);
-      path.setAttribute("stroke-width", 2);
+      path.setAttribute("stroke-width", 2.2);
       path.setAttribute("stroke-linejoin", "round");
       path.setAttribute("stroke-linecap", "round");
       svg.appendChild(path);
 
       const last = points[points.length - 1];
-      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      const dot = svgEl("circle");
       dot.setAttribute("cx", xScale(last.date)); dot.setAttribute("cy", yScale(last.value));
       dot.setAttribute("r", 4); dot.setAttribute("fill", color);
-      dot.setAttribute("stroke", resolveVar("var(--surface-1)")); dot.setAttribute("stroke-width", 2);
+      dot.setAttribute("stroke", cssVar("--card")); dot.setAttribute("stroke-width", 2);
       svg.appendChild(dot);
     });
 
-    const hitRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    const hitRect = svgEl("rect");
     hitRect.setAttribute("x", marginL); hitRect.setAttribute("y", marginT);
     hitRect.setAttribute("width", plotW); hitRect.setAttribute("height", plotH);
     hitRect.setAttribute("fill", "transparent");
     svg.appendChild(hitRect);
 
-    const crosshair = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    const crosshair = svgEl("line");
     crosshair.setAttribute("y1", marginT); crosshair.setAttribute("y2", marginT + plotH);
-    crosshair.setAttribute("stroke", resolveVar("var(--baseline)"));
+    crosshair.setAttribute("stroke", cssVar("--baseline"));
     crosshair.setAttribute("stroke-width", 1);
     crosshair.style.display = "none";
     svg.appendChild(crosshair);
 
     hitRect.addEventListener("pointermove", (e) => {
       const bbox = svg.getBoundingClientRect();
-      const scaleX = W / bbox.width;
-      const mouseX = (e.clientX - bbox.left) * scaleX;
+      const mouseX = (e.clientX - bbox.left) * (W / bbox.width);
       const ratio = Math.max(0, Math.min(1, (mouseX - marginL) / plotW));
       const t = minDate + ratio * (maxDate - minDate);
       let nearest = allDates[0], minDiff = Infinity;
@@ -659,14 +702,14 @@ details.table-toggle summary { cursor: pointer; font-size: 12.5px; color: var(--
       CATEGORY_ORDER.forEach(cat => {
         const p = byCat[cat].find(pt => pt.date.getTime() === nearest.getTime());
         if (!p) return;
-        rowsHtml += `<div class="t-row"><span class="t-key" style="background:${resolveVar(CATEGORY_COLOR[cat])}"></span>${escapeHtml(cat)}<span class="t-val">${fmtInt(p.value)}</span></div>`;
+        rowsHtml += `<div class="t-row"><span class="t-key" style="background:${catColor(cat)}"></span>${escapeHtml(cat)}<span class="t-val">${fmtInt(p.value)}</span></div>`;
       });
       tooltip.innerHTML = `<div class="t-title">${nearest.toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" })}</div>${rowsHtml}`;
       tooltip.style.opacity = 1;
       const tRect = tooltip.getBoundingClientRect();
       let left = (e.clientX - bbox.left + 14);
       if (left + tRect.width > bbox.width) left = e.clientX - bbox.left - tRect.width - 14;
-      tooltip.style.left = left + "px";
+      tooltip.style.left = Math.max(0, left) + "px";
       tooltip.style.top = (e.clientY - bbox.top - 20) + "px";
     });
     hitRect.addEventListener("pointerleave", () => { tooltip.style.opacity = 0; crosshair.style.display = "none"; });
@@ -674,19 +717,18 @@ details.table-toggle summary { cursor: pointer; font-size: 12.5px; color: var(--
 
   function renderTrendTable(trendRows) {
     const table = document.getElementById("trend-table");
-    const dates = [...new Set(trendRows.map(r => { const d = fmtDate(r.Date); return d ? d.toISOString().slice(0,10) : null; }))].filter(Boolean).sort();
+    const dates = [...new Set(trendRows.map(r => { const d = fmtDate(r.Date); return d ? d.toISOString().slice(0, 10) : null; }))].filter(Boolean).sort();
     const recentDates = dates.slice(-14);
-    let html = "<thead><tr><th>Tanggal</th>" + CATEGORY_ORDER.map(c => `<th>${escapeHtml(c)}</th>`).join("") + "</tr></thead><tbody>";
+    let html = "<thead><tr><th>Tanggal</th>" + CATEGORY_ORDER.map(c => `<th>${escapeHtml(CATEGORY_SHORT[c] || c)}</th>`).join("") + "</tr></thead><tbody>";
     recentDates.forEach(dateStr => {
       html += `<tr><td>${dateStr}</td>`;
       CATEGORY_ORDER.forEach(cat => {
-        const row = trendRows.find(r => { const d = fmtDate(r.Date); return d && d.toISOString().slice(0,10) === dateStr && r.Category === cat; });
-        html += `<td>${row ? fmtInt(num(row.Quantity)) : "-"}</td>`;
+        const row = trendRows.find(r => { const d = fmtDate(r.Date); return d && d.toISOString().slice(0, 10) === dateStr && r.Category === cat; });
+        html += `<td>${row ? fmtInt(num(row.Quantity)) : "–"}</td>`;
       });
       html += "</tr>";
     });
-    html += "</tbody>";
-    table.innerHTML = html;
+    table.innerHTML = html + "</tbody>";
   }
 
   function showBanner(msg, isError) {
@@ -694,50 +736,58 @@ details.table-toggle summary { cursor: pointer; font-size: 12.5px; color: var(--
     banner.textContent = msg;
     banner.className = "state-banner show" + (isError ? " error" : "");
   }
-  function hideBanner() {
-    document.getElementById("state-banner").className = "state-banner";
+  function hideBanner() { document.getElementById("state-banner").className = "state-banner"; }
+
+  function rerenderAll() {
+    if (!state.current) return;
+    renderHero(state.current);
+    renderBranchRows(state.current, state.donut);
+    renderTrendLegend();
+    if (state.trend) { renderTrendChart(state.trend); }
   }
 
   async function loadAll() {
-    document.getElementById("live-status").textContent = "Memuat data terbaru...";
+    document.getElementById("live-status").textContent = "Memuat data terbaru…";
     try {
       const [current, trend, donut] = await Promise.all([
         fetchGviz("Current_Looker"),
         fetchGviz("Trend_Looker"),
-        fetchGviz("Donut_Looker")
+        fetchGviz("Donut_Looker").catch(() => null)
       ]);
-      const currentRows = toObjects(current.cols, current.rows);
-      const trendRows = toObjects(trend.cols, trend.rows);
-      const donutRows = toObjects(donut.cols, donut.rows);
+      state.current = toObjects(current.cols, current.rows);
+      state.trend = toObjects(trend.cols, trend.rows);
+      state.donut = donut ? toObjects(donut.cols, donut.rows) : null;
 
-      state.current = currentRows; state.trend = trendRows; state.donut = donutRows;
-
-      renderHero(currentRows);
-      renderKpiGrid(currentRows);
-      renderBarChart(currentRows);
+      renderHero(state.current);
+      renderBranchRows(state.current, state.donut);
       renderTrendLegend();
-      renderTrendChart(trendRows);
-      renderTrendTable(trendRows);
-      renderDonuts(donutRows);
+      renderTrendChart(state.trend);
+      renderTrendTable(state.trend);
 
-      const overall = currentRows.find(r => r.Category === "Overall");
+      const overall = state.current.find(r => r.Category === "Overall");
       const snapDate = overall ? overall["Snapshot Date"] : "";
-      document.getElementById("snapshot-date-label").textContent = "Snapshot terakhir: " + snapDate;
-      document.getElementById("footer-note").textContent = "Sumber data: Google Sheet \"MEDSPIN 2026 Central Dashboard\" — tab Current_Looker, Trend_Looker, Donut_Looker. Dimuat otomatis saat halaman dibuka.";
+      document.getElementById("snapshot-date-label").textContent = snapDate ? "Snapshot terakhir: " + snapDate : "";
+      document.getElementById("footer-note").innerHTML =
+        'Sumber data: Google Sheet <b>“MEDSPIN 2026 Central Dashboard”</b> — tab Current_Looker, Trend_Looker, Donut_Looker.<br>Dimuat otomatis setiap halaman dibuka.';
       document.getElementById("live-status").textContent = "Terhubung — data live";
       hideBanner();
     } catch (err) {
       console.error(err);
       document.getElementById("live-status").textContent = "Gagal memuat data";
-      showBanner("Gagal mengambil data dari Google Sheet. Pastikan sheet dapat diakses (\"Anyone with the link\") dan koneksi internet aktif. Detail: " + err.message, true);
+      document.getElementById("branch-list").innerHTML = "";
+      document.getElementById("hero-card").innerHTML = "";
+      showBanner("Gagal mengambil data dari Google Sheet. Pastikan sheet bisa diakses (“Anyone with the link”) dan koneksi internet aktif. Detail: " + err.message, true);
     }
   }
 
+  applyThemeLabel();
+  document.getElementById("theme-btn").addEventListener("click", toggleTheme);
   document.getElementById("refresh-btn").addEventListener("click", loadAll);
+
+  let resizeTimer;
   window.addEventListener("resize", () => {
-    if (!state.current) return;
-    renderBarChart(state.current);
-    renderTrendChart(state.trend);
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { if (state.trend) renderTrendChart(state.trend); }, 120);
   });
 
   loadAll();
