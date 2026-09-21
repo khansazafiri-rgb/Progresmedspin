@@ -130,7 +130,7 @@ svg text { font-family: inherit; }
   padding: 24px 26px;
   margin-bottom: 26px;
 }
-.hero-grid { display: grid; grid-template-columns: minmax(200px, auto) 1fr minmax(210px, auto); gap: 26px; align-items: center; }
+.hero-grid { display: grid; grid-template-columns: minmax(185px, auto) minmax(0, 1fr) 250px; gap: 26px; align-items: center; }
 @media (max-width: 860px) { .hero-grid { grid-template-columns: 1fr; gap: 20px; } }
 .eyebrow {
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
@@ -156,6 +156,7 @@ svg text { font-family: inherit; }
 .pace-box.tone-good { --pace-fg: var(--good-fg); --pace-bg: var(--good-bg); --pace-bd: var(--good-bd); }
 .pace-box.tone-warn { --pace-fg: var(--warn-fg); --pace-bg: var(--warn-bg); --pace-bd: var(--warn-bd); }
 .pace-box.tone-crit { --pace-fg: var(--crit-fg); --pace-bg: var(--crit-bg); --pace-bd: var(--crit-bd); }
+.pace-box.tone-neutral { --pace-fg: var(--text-strong); --pace-bg: var(--card-sunken); --pace-bd: var(--border-strong); }
 .pace-eyebrow {
   font-size: 10px; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase;
   color: var(--pace-fg); margin-bottom: 3px;
@@ -225,6 +226,7 @@ mark.hl {
 .pill-good { background: var(--good-bg); color: var(--good-fg); border-color: var(--good-bd); }
 .pill-warn { background: var(--warn-bg); color: var(--warn-fg); border-color: var(--warn-bd); }
 .pill-crit { background: var(--crit-bg); color: var(--crit-fg); border-color: var(--crit-bd); }
+.pill-neutral { background: var(--card-sunken); color: var(--text); border-color: var(--border-strong); }
 
 .br-count { font-size: 13px; color: var(--text-muted); margin-bottom: 9px; }
 .br-count .big { font-size: 25px; font-weight: 760; letter-spacing: -0.025em; color: var(--text-strong); margin-right: 2px; }
@@ -383,8 +385,7 @@ details.table-toggle summary:hover { color: var(--text-strong); }
   /* ---------- Tema ---------- */
   function currentTheme() { return document.documentElement.getAttribute("data-theme") || "light"; }
   function applyThemeLabel() {
-    const btn = document.getElementById("theme-btn");
-    btn.textContent = currentTheme() === "dark" ? "☀ Mode terang" : "🌙 Mode gelap";
+    document.getElementById("theme-btn").textContent = currentTheme() === "dark" ? "☀ Mode terang" : "🌙 Mode gelap";
   }
   function toggleTheme() {
     const next = currentTheme() === "dark" ? "light" : "dark";
@@ -394,26 +395,77 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     rerenderAll();
   }
 
-  /* ---------- Util ---------- */
-  function parsePercent(v) {
-    if (typeof v === "number") return v <= 1 ? v * 100 : v;
-    if (typeof v === "string") return parseFloat(v.replace("%", "").trim()) || 0;
-    return 0;
+  /* ============================================================
+     PEMBACAAN ANGKA
+     Google Visualization API mengirim tiap sel sebagai { v, f }:
+       v = nilai asli (angka JavaScript untuk sel numerik)
+       f = string hasil format mengikuti locale spreadsheet
+     Sheet ini ber-locale Inggris, jadi f untuk 23,8 adalah "23.8".
+     Karena itu angka SELALU dibaca dari v; f hanya dipakai untuk teks.
+     ============================================================ */
+  function parseLooseNumber(raw) {
+    let s = String(raw).trim().replace(/[^\d.,\-]/g, "");
+    if (!s) return NaN;
+    const lastComma = s.lastIndexOf(","), lastDot = s.lastIndexOf(".");
+    if (lastComma > -1 && lastDot > -1) {
+      // Pemisah yang muncul paling belakang adalah pemisah desimal.
+      s = lastComma > lastDot ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+    } else if (lastComma > -1) {
+      // "1,234" -> ribuan; "23,8" -> desimal.
+      s = /^-?\d{1,3}(,\d{3})+$/.test(s) ? s.replace(/,/g, "") : s.replace(",", ".");
+    } else if (lastDot > -1 && /^-?\d{1,3}(\.\d{3})+$/.test(s)) {
+      s = s.replace(/\./g, "");
+    }
+    return parseFloat(s);
   }
-  function num(v) {
-    if (typeof v === "number") return v;
-    if (typeof v === "string") return parseFloat(v.replace(/\./g, "").replace(/,/g, ".").replace(/[^\d.\-]/g, "")) || 0;
-    return 0;
+  function num(cell, fallback) {
+    const fb = fallback === undefined ? 0 : fallback;
+    if (cell == null) return fb;
+    if (typeof cell === "number") return cell;
+    if (typeof cell === "object") {
+      if (typeof cell.v === "number") return cell.v;
+      const n = parseLooseNumber(cell.f != null ? cell.f : cell.v);
+      return isNaN(n) ? fb : n;
+    }
+    const n = parseLooseNumber(cell);
+    return isNaN(n) ? fb : n;
   }
+  function hasNum(cell) {
+    if (cell == null) return false;
+    if (typeof cell === "object") {
+      if (typeof cell.v === "number") return true;
+      if (cell.v == null && cell.f == null) return false;
+      return !isNaN(parseLooseNumber(cell.f != null ? cell.f : cell.v));
+    }
+    return !isNaN(parseLooseNumber(cell));
+  }
+  function txt(cell) {
+    if (cell == null) return "";
+    if (typeof cell === "object") {
+      if (cell.f != null && cell.f !== "") return String(cell.f);
+      if (cell.v == null) return "";
+      return String(cell.v);
+    }
+    return String(cell);
+  }
+  function parsePercent(cell) {
+    if (cell != null && typeof cell === "object" && typeof cell.v === "number") {
+      return cell.v <= 1 ? cell.v * 100 : cell.v;
+    }
+    const n = parseLooseNumber(txt(cell));
+    return isNaN(n) ? 0 : n;
+  }
+
   const fmtInt = (n) => Math.round(n).toLocaleString("id-ID");
   const fmtDec = (n) => Number(n).toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  function fmtDate(v) {
-    if (v instanceof Date) return v;
-    if (typeof v === "string" && /^Date\(/.test(v)) {
-      const m = v.match(/Date\((\d+),(\d+),(\d+)/);
+  function fmtDate(cell) {
+    const raw = (cell != null && typeof cell === "object") ? (cell.v != null ? cell.v : cell.f) : cell;
+    if (raw instanceof Date) return raw;
+    if (typeof raw === "string" && /^Date\(/.test(raw)) {
+      const m = raw.match(/Date\((\d+),(\d+),(\d+)/);
       if (m) return new Date(+m[1], +m[2], +m[3]);
     }
-    if (typeof v === "string") { const d = new Date(v); if (!isNaN(d)) return d; }
+    if (typeof raw === "string") { const d = new Date(raw); if (!isNaN(d)) return d; }
     return null;
   }
   const fmtDateShort = (d) => d.toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
@@ -421,15 +473,18 @@ details.table-toggle summary:hover { color: var(--text-strong); }
   const svgEl = (tag) => document.createElementNS("http://www.w3.org/2000/svg", tag);
 
   function statusPillClass(status) {
-    if (/target met|on track|ahead|good|aman/i.test(status)) return "pill-good";
+    if (/target met|on track|ahead|good|aman|tercapai/i.test(status)) return "pill-good";
     if (/critical|behind|urgent|danger/i.test(status)) return "pill-crit";
+    if (/in progress/i.test(status)) return "pill-neutral";
     return "pill-warn";
   }
-  // Nada warna kotak "orang per hari": bandingkan kebutuhan vs kecepatan nyata.
-  function paceTone(requiredPace, avgPace, remaining) {
-    if (remaining <= 0) return "tone-good";
-    if (avgPace > 0 && requiredPace <= avgPace) return "tone-good";
-    if (avgPace > 0 && requiredPace <= avgPace * 1.5) return "tone-warn";
+  // Nada kotak "orang per hari": bandingkan kebutuhan vs kecepatan nyata.
+  // avgKnown=false berarti belum ada data laju, jadi jangan menuduh merah.
+  function paceTone(requiredPace, avgPace, remaining, avgKnown) {
+    if (remaining <= 0 || requiredPace <= 0) return "tone-good";
+    if (!avgKnown) return "tone-neutral";
+    if (requiredPace <= avgPace) return "tone-good";
+    if (requiredPace <= avgPace * 1.5) return "tone-warn";
     return "tone-crit";
   }
 
@@ -440,49 +495,85 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     const jsonStr = text.substring(text.indexOf("{"), text.lastIndexOf("}") + 1);
     const data = JSON.parse(jsonStr);
     const cols = data.table.cols.map(c => c.label || c.id);
-    const rows = data.table.rows.map(r => r.c.map(c => (c ? (c.f !== undefined && c.f !== null ? c.f : c.v) : null)));
+    // Simpan v dan f sekaligus supaya angka tidak pernah dibaca dari string terformat.
+    const rows = data.table.rows.map(r => (r.c || []).map(c => ({
+      v: c ? (c.v === undefined ? null : c.v) : null,
+      f: c ? (c.f === undefined ? null : c.f) : null
+    })));
     return { cols, rows };
   }
   function toObjects(cols, rows) {
-    return rows.map(r => { const o = {}; cols.forEach((c, i) => o[c] = r[i]); return o; });
+    return rows.map(r => { const o = {}; cols.forEach((c, i) => o[c] = r[i] || null); return o; });
   }
 
   const state = { current: null, trend: null, donut: null };
 
+  /* ---------- Baca satu baris Current_Looker jadi angka siap pakai ---------- */
+  function readRow(row) {
+    const current = num(row.Current);
+    const target = num(row.Target);
+    const remaining = hasNum(row.Remaining) ? num(row.Remaining) : Math.max(target - current, 0);
+    const daysLeft = num(row["Days Left"]);
+    const progress = hasNum(row.Progress) ? parsePercent(row.Progress) : (target > 0 ? (current / target) * 100 : 0);
+    // Required Pace sudah dihitung di sheet; hitung sendiri hanya bila kosong.
+    const requiredPace = hasNum(row["Required Pace"])
+      ? num(row["Required Pace"])
+      : (daysLeft > 0 ? remaining / daysLeft : 0);
+    const avgKnown = hasNum(row["7D Avg / Day"]);
+    const avgPace = avgKnown ? num(row["7D Avg / Day"]) : 0;
+    // Pace Gap juga tersedia di sheet; pakai itu bila ada.
+    const paceGap = hasNum(row["Pace Gap"]) ? num(row["Pace Gap"]) : Math.max(requiredPace - avgPace, 0);
+    return {
+      current, target, remaining, daysLeft, progress, requiredPace, avgPace, avgKnown, paceGap,
+      status: txt(row.Status),
+      deadline: txt(row.Deadline),
+      snapshot: txt(row["Snapshot Date"])
+    };
+  }
+
   /* ---------- Hero ---------- */
   function renderHero(currentRows) {
-    const overall = currentRows.find(r => r.Category === "Overall");
     const hero = document.getElementById("hero-card");
-    if (!overall) { hero.innerHTML = ""; return; }
+    const overallRow = currentRows.find(r => txt(r.Category) === "Overall");
+    if (!overallRow) { hero.innerHTML = ""; return; }
+    const o = readRow(overallRow);
 
-    const current = num(overall.Current), target = num(overall.Target);
-    const progress = parsePercent(overall.Progress);
-    const remaining = num(overall.Remaining);
-    const daysLeft = num(overall["Days Left"]);
-    const requiredPace = num(overall["Required Pace"]);
-    const avgPace = num(overall["7D Avg / Day"]);
-    const tone = paceTone(requiredPace, avgPace, remaining);
+    // Sheet mengosongkan 7D Avg untuk Overall — jumlahkan laju tiap cabang.
+    let avgPace = o.avgPace, avgKnown = o.avgKnown;
+    if (!avgKnown) {
+      let sum = 0, found = false;
+      CATEGORY_ORDER.forEach(cat => {
+        const r = currentRows.find(x => txt(x.Category) === cat);
+        if (r && hasNum(r["7D Avg / Day"])) { sum += num(r["7D Avg / Day"]); found = true; }
+      });
+      if (found) { avgPace = sum; avgKnown = true; }
+    }
+    const tone = paceTone(o.requiredPace, avgPace, o.remaining, avgKnown);
 
     hero.innerHTML = `
       <div class="hero-grid">
         <div>
           <div class="eyebrow">Total seluruh cabang</div>
-          <div class="hero-figure tnum">${fmtInt(current)}<span class="of"> / ${fmtInt(target)}</span></div>
-          <div class="hero-label">peserta terdaftar · <b>${fmtInt(daysLeft)} hari</b> menuju deadline terdekat</div>
+          <div class="hero-figure tnum">${fmtInt(o.current)}<span class="of"> / ${fmtInt(o.target)}</span></div>
+          <div class="hero-label">peserta terdaftar · <b>${fmtInt(o.daysLeft)} hari</b> menuju deadline terjauh${o.deadline ? " (" + escapeHtml(o.deadline) + ")" : ""}</div>
         </div>
         <div>
           <div class="eyebrow">Capaian terhadap target</div>
-          <div class="hero-bar-track"><div class="hero-bar-fill" style="width:${Math.min(Math.max(progress, 0), 100)}%"></div></div>
+          <div class="hero-bar-track"><div class="hero-bar-fill" style="width:${Math.min(Math.max(o.progress, 0), 100)}%"></div></div>
           <div class="hero-bar-labels">
-            <span><b class="tnum">${fmtDec(progress)}%</b> tercapai</span>
-            <span>${remaining > 0 ? "masih kurang <b class=\"tnum\">" + fmtInt(remaining) + "</b> peserta" : "<b>target terpenuhi</b>"}</span>
+            <span><b class="tnum">${fmtDec(o.progress)}%</b> tercapai</span>
+            <span>${o.remaining > 0 ? `masih kurang <b class="tnum">${fmtInt(o.remaining)}</b> peserta` : "<b>target terpenuhi</b>"}</span>
           </div>
         </div>
         <div class="pace-box ${tone}">
           <div class="pace-eyebrow">Butuh masuk</div>
-          <div class="pace-figure tnum">${fmtDec(requiredPace)}<span class="unit">orang</span></div>
+          <div class="pace-figure tnum">${fmtDec(o.requiredPace)}<span class="unit">orang</span></div>
           <div class="pace-sub">setiap hari</div>
-          <div class="pace-note">Kecepatan 7 hari terakhir: <b class="tnum">${fmtDec(avgPace)}/hari</b></div>
+          <div class="pace-note">${
+            avgKnown
+              ? `Kecepatan sekarang <b class="tnum">${fmtDec(avgPace)}/hari</b> (gabungan semua cabang).`
+              : `Kecepatan 7 hari terakhir belum tersedia.`
+          }</div>
         </div>
       </div>
     `;
@@ -513,29 +604,24 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     list.innerHTML = "";
 
     CATEGORY_ORDER.forEach(cat => {
-      const row = currentRows.find(r => r.Category === cat);
+      const row = currentRows.find(r => txt(r.Category) === cat);
       if (!row) return;
+      const d = readRow(row);
 
-      let current = num(row.Current), target = num(row.Target);
-      // Kalau sheet Donut tersedia, pakai untuk verifikasi total (Registered + Remaining).
+      let current = d.current, target = d.target, progress = d.progress;
       if (donutRows && donutRows.length) {
-        const reg = donutRows.find(r => r.Category === cat && r.Segment === "Registered");
-        const rem = donutRows.find(r => r.Category === cat && r.Segment === "Remaining");
+        const reg = donutRows.find(r => txt(r.Category) === cat && txt(r.Segment) === "Registered");
+        const rem = donutRows.find(r => txt(r.Category) === cat && txt(r.Segment) === "Remaining");
         if (reg) {
           current = num(reg.Value);
           const tot = current + (rem ? num(rem.Value) : 0);
-          if (tot > 0) target = tot;
+          if (tot > 0) { target = tot; progress = (current / tot) * 100; }
         }
       }
-      const progress = target > 0 ? (current / target) * 100 : parsePercent(row.Progress);
-      const remaining = Math.max(num(row.Remaining) || (target - current), 0);
-      const requiredPace = num(row["Required Pace"]);
-      const avgPace = num(row["7D Avg / Day"]);
-      const daysLeft = num(row["Days Left"]);
-      const status = row.Status || "";
+
       const color = catColor(cat);
-      const tone = paceTone(requiredPace, avgPace, remaining);
-      const behind = remaining > 0 && avgPace > 0 && requiredPace > avgPace;
+      const tone = paceTone(d.requiredPace, d.avgPace, d.remaining, d.avgKnown);
+      const behind = d.remaining > 0 && d.avgKnown && d.requiredPace > d.avgPace;
 
       const art = document.createElement("article");
       art.className = "branch-row";
@@ -546,30 +632,32 @@ details.table-toggle summary:hover { color: var(--text-strong); }
         <div class="br-main">
           <div class="br-head">
             <span class="br-name">${escapeHtml(cat)}</span>
-            ${status ? `<span class="status-pill ${statusPillClass(status)}"><span class="ic"></span>${escapeHtml(status)}</span>` : ""}
+            ${d.status ? `<span class="status-pill ${statusPillClass(d.status)}"><span class="ic"></span>${escapeHtml(d.status)}</span>` : ""}
           </div>
           <div class="br-count">
             <span class="big tnum">${fmtInt(current)}</span><span class="of"> dari ${fmtInt(target)} peserta</span>
           </div>
           <div class="br-bar-track"><div class="br-bar-fill" style="width:${Math.min(Math.max(progress, 0), 100)}%"></div></div>
           <div class="br-meta">
-            <span class="chip ${remaining > 0 ? "chip-alert" : "chip-ok"}">${remaining > 0 ? `kurang <b class="tnum">${fmtInt(remaining)}</b> peserta` : `<b>target tercapai</b>`}</span>
-            <span class="chip">sisa <b class="tnum">${fmtInt(daysLeft)}</b> hari</span>
-            <span class="chip">rata-rata masuk <b class="tnum">${fmtDec(avgPace)}</b>/hari</span>
+            <span class="chip ${d.remaining > 0 ? "chip-alert" : "chip-ok"}">${d.remaining > 0 ? `kurang <b class="tnum">${fmtInt(d.remaining)}</b> peserta` : `<b>target tercapai</b>`}</span>
+            <span class="chip">sisa <b class="tnum">${fmtInt(d.daysLeft)}</b> hari${d.deadline ? ` · s.d. <b>${escapeHtml(d.deadline)}</b>` : ""}</span>
+            <span class="chip">${d.avgKnown ? `rata-rata masuk <b class="tnum">${fmtDec(d.avgPace)}</b>/hari` : `rata-rata masuk <b>belum ada data</b>`}</span>
             <span class="chip">capaian <b class="tnum">${fmtDec(progress)}%</b></span>
           </div>
         </div>
 
         <div class="pace-box ${tone} br-pace">
           <div class="pace-eyebrow">Butuh masuk</div>
-          <div class="pace-figure tnum">${fmtDec(requiredPace)}<span class="unit">orang</span></div>
+          <div class="pace-figure tnum">${fmtDec(d.requiredPace)}<span class="unit">orang</span></div>
           <div class="pace-sub">setiap hari</div>
           <div class="pace-note">${
-            remaining <= 0
-              ? `Sudah <b>melewati target</b> — jaga momentum.`
-              : behind
-                ? `Sekarang baru <b class="tnum">${fmtDec(avgPace)}/hari</b> — <b>kurang ${fmtDec(requiredPace - avgPace)} orang/hari</b>.`
-                : `Sekarang <b class="tnum">${fmtDec(avgPace)}/hari</b> — <b>laju sudah cukup</b>.`
+            d.remaining <= 0
+              ? `Sudah <b>mencapai target</b> — jaga momentum.`
+              : !d.avgKnown
+                ? `Laju <b>${fmtInt(d.remaining)} peserta</b> dibagi <b>${fmtInt(d.daysLeft)} hari</b> tersisa.`
+                : behind
+                  ? `Sekarang baru <b class="tnum">${fmtDec(d.avgPace)}/hari</b> — <b>kurang ${fmtDec(d.paceGap)} orang/hari</b>.`
+                  : `Sekarang <b class="tnum">${fmtDec(d.avgPace)}/hari</b> — <b>laju sudah cukup</b>.`
           }</div>
         </div>
       `;
@@ -584,7 +672,7 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     `).join("");
   }
 
-  /* ---------- Diagram garis (tetap di tempatnya) ---------- */
+  /* ---------- Diagram garis ---------- */
   function renderTrendChart(trendRows) {
     const svg = document.getElementById("trend-chart");
     const tooltip = document.getElementById("trend-tooltip");
@@ -592,8 +680,9 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     CATEGORY_ORDER.forEach(cat => byCat[cat] = []);
     trendRows.forEach(r => {
       const d = fmtDate(r.Date);
-      if (!d || !byCat[r.Category]) return;
-      byCat[r.Category].push({ date: d, value: num(r.Quantity), target: num(r.Target) });
+      const cat = txt(r.Category);
+      if (!d || !byCat[cat]) return;
+      byCat[cat].push({ date: d, value: num(r.Quantity), target: num(r.Target) });
     });
     CATEGORY_ORDER.forEach(cat => byCat[cat].sort((a, b) => a.date - b.date));
 
@@ -717,14 +806,17 @@ details.table-toggle summary:hover { color: var(--text-strong); }
 
   function renderTrendTable(trendRows) {
     const table = document.getElementById("trend-table");
-    const dates = [...new Set(trendRows.map(r => { const d = fmtDate(r.Date); return d ? d.toISOString().slice(0, 10) : null; }))].filter(Boolean).sort();
-    const recentDates = dates.slice(-14);
+    const keyed = trendRows.map(r => {
+      const d = fmtDate(r.Date);
+      return d ? { key: d.toISOString().slice(0, 10), cat: txt(r.Category), qty: num(r.Quantity) } : null;
+    }).filter(Boolean);
+    const dates = [...new Set(keyed.map(r => r.key))].sort().slice(-14);
     let html = "<thead><tr><th>Tanggal</th>" + CATEGORY_ORDER.map(c => `<th>${escapeHtml(CATEGORY_SHORT[c] || c)}</th>`).join("") + "</tr></thead><tbody>";
-    recentDates.forEach(dateStr => {
+    dates.forEach(dateStr => {
       html += `<tr><td>${dateStr}</td>`;
       CATEGORY_ORDER.forEach(cat => {
-        const row = trendRows.find(r => { const d = fmtDate(r.Date); return d && d.toISOString().slice(0, 10) === dateStr && r.Category === cat; });
-        html += `<td>${row ? fmtInt(num(row.Quantity)) : "–"}</td>`;
+        const hit = keyed.find(r => r.key === dateStr && r.cat === cat);
+        html += `<td>${hit ? fmtInt(hit.qty) : "–"}</td>`;
       });
       html += "</tr>";
     });
@@ -743,7 +835,7 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     renderHero(state.current);
     renderBranchRows(state.current, state.donut);
     renderTrendLegend();
-    if (state.trend) { renderTrendChart(state.trend); }
+    if (state.trend) renderTrendChart(state.trend);
   }
 
   async function loadAll() {
@@ -764,8 +856,8 @@ details.table-toggle summary:hover { color: var(--text-strong); }
       renderTrendChart(state.trend);
       renderTrendTable(state.trend);
 
-      const overall = state.current.find(r => r.Category === "Overall");
-      const snapDate = overall ? overall["Snapshot Date"] : "";
+      const overall = state.current.find(r => txt(r.Category) === "Overall");
+      const snapDate = overall ? txt(overall["Snapshot Date"]) : "";
       document.getElementById("snapshot-date-label").textContent = snapDate ? "Snapshot terakhir: " + snapDate : "";
       document.getElementById("footer-note").innerHTML =
         'Sumber data: Google Sheet <b>“MEDSPIN 2026 Central Dashboard”</b> — tab Current_Looker, Trend_Looker, Donut_Looker.<br>Dimuat otomatis setiap halaman dibuka.';
