@@ -530,6 +530,9 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     return null;
   }
   const fmtDateShort = (d) => d.toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
+  // Tengah malam hari ini menurut jam perangkat pembaca.
+  function startOfToday() { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); }
+  const dayDiff = (a, b) => Math.round((a - b) / 86400000);   // selisih hari, bebas dari jam & DST
   function fmtDateLong(cell) {
     const d = fmtDate(cell);
     return d ? d.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }) : txt(cell);
@@ -545,8 +548,10 @@ details.table-toggle summary:hover { color: var(--text-strong); }
   }
   // Nada kotak "orang per hari": bandingkan kebutuhan vs kecepatan nyata.
   // avgKnown=false berarti belum ada data laju, jadi jangan menuduh merah.
-  function paceTone(requiredPace, avgPace, remaining, avgKnown) {
-    if (remaining <= 0 || requiredPace <= 0) return "tone-good";
+  function paceTone(requiredPace, avgPace, remaining, avgKnown, passed) {
+    if (remaining <= 0) return "tone-good";
+    if (passed) return "tone-crit";
+    if (requiredPace <= 0) return "tone-good";
     if (!avgKnown) return "tone-neutral";
     if (requiredPace <= avgPace) return "tone-good";
     if (requiredPace <= avgPace * 1.5) return "tone-warn";
@@ -574,24 +579,38 @@ details.table-toggle summary:hover { color: var(--text-strong); }
   const state = { current: null, trend: null, regions: null, source: null };
 
 
+  /* ---------- Hitung mundur ke deadline, dari hari ini ---------- */
+  function deadlineCountdown(deadlineCell, fallbackDays) {
+    const d = fmtDate(deadlineCell);
+    if (!d) return { daysLeft: Math.max(fallbackDays || 0, 0), passed: false };
+    // Hari ini ikut dihitung: deadline hari ini berarti masih tersisa 1 hari.
+    const left = dayDiff(new Date(d.getFullYear(), d.getMonth(), d.getDate()), startOfToday()) + 1;
+    return { daysLeft: Math.max(left, 0), passed: left <= 0 };
+  }
+  function sisaHariText(daysLeft, passed) {
+    if (passed) return "<b>deadline lewat</b>";
+    if (daysLeft <= 1) return "<b>hari terakhir</b>";
+    return `sisa <b class="tnum">${fmtInt(daysLeft)}</b> hari`;
+  }
+
   /* ---------- Baca satu baris Current_Looker jadi angka siap pakai ---------- */
   function readRow(row) {
     const current = num(row.Current);
     const target = num(row.Target);
     const remaining = hasNum(row.Remaining) ? num(row.Remaining) : Math.max(target - current, 0);
-    const daysLeft = num(row["Days Left"]);
+    // Sisa hari dihitung dari HARI INI, bukan dari tanggal data. Kolom "Days Left" di sheet
+    // memakai tanggal snapshot, jadi ikut tertinggal kalau export belum diperbarui hari ini.
+    const dl = deadlineCountdown(row.Deadline, num(row["Days Left"]));
+    const daysLeft = dl.daysLeft, deadlinePassed = dl.passed;
     // Dihitung langsung supaya capaian di atas 100% (mis. 506/500) tidak salah dibaca sebagai 1,0%.
     const progress = target > 0 ? (current / target) * 100 : parsePercent(row.Progress);
-    // Required Pace sudah dihitung di sheet; hitung sendiri hanya bila kosong.
-    const requiredPace = hasNum(row["Required Pace"])
-      ? num(row["Required Pace"])
-      : (daysLeft > 0 ? remaining / daysLeft : 0);
+    // Required Pace dari sheet ikut memakai sisa hari yang lama, jadi dihitung ulang di sini.
+    const requiredPace = remaining <= 0 ? 0 : (daysLeft > 0 ? remaining / daysLeft : 0);
     const avgKnown = hasNum(row["7D Avg / Day"]);
     const avgPace = avgKnown ? num(row["7D Avg / Day"]) : 0;
-    // Pace Gap juga tersedia di sheet; pakai itu bila ada.
-    const paceGap = hasNum(row["Pace Gap"]) ? num(row["Pace Gap"]) : Math.max(requiredPace - avgPace, 0);
+    const paceGap = Math.max(requiredPace - avgPace, 0);
     return {
-      current, target, remaining, daysLeft, progress, requiredPace, avgPace, avgKnown, paceGap,
+      current, target, remaining, daysLeft, deadlinePassed, progress, requiredPace, avgPace, avgKnown, paceGap,
       status: txt(row.Status),
       deadline: fmtDateLong(row.Deadline),
       snapshot: fmtDateLong(row["Snapshot Date"])
@@ -615,14 +634,18 @@ details.table-toggle summary:hover { color: var(--text-strong); }
       });
       if (found) { avgPace = sum; avgKnown = true; }
     }
-    const tone = paceTone(o.requiredPace, avgPace, o.remaining, avgKnown);
+    const tone = paceTone(o.requiredPace, avgPace, o.remaining, avgKnown, o.deadlinePassed);
 
     hero.innerHTML = `
       <div class="hero-grid">
         <div>
           <div class="eyebrow">Total seluruh cabang</div>
           <div class="hero-figure tnum">${fmtInt(o.current)}<span class="of"> / ${fmtInt(o.target)}</span></div>
-          <div class="hero-label">peserta terdaftar · <b>${fmtInt(o.daysLeft)} hari</b> menuju deadline terjauh${o.deadline ? " (" + escapeHtml(o.deadline) + ")" : ""}</div>
+          <div class="hero-label">peserta terdaftar · ${
+            o.deadlinePassed ? "<b>semua deadline sudah lewat</b>"
+            : o.daysLeft <= 1 ? "<b>hari terakhir</b>"
+            : `<b>${fmtInt(o.daysLeft)} hari</b> menuju deadline terjauh`
+          }${o.deadline ? " (" + escapeHtml(o.deadline) + ")" : ""}</div>
         </div>
         <div>
           <div class="eyebrow">Capaian terhadap target</div>
@@ -633,9 +656,15 @@ details.table-toggle summary:hover { color: var(--text-strong); }
           </div>
         </div>
         <div class="pace-box ${tone}">
-          <div class="pace-eyebrow">Butuh masuk</div>
-          <div class="pace-figure tnum">${fmtDec(o.requiredPace)}<span class="unit">orang</span></div>
-          <div class="pace-sub">setiap hari</div>
+          ${o.deadlinePassed && o.remaining > 0 ? `
+            <div class="pace-eyebrow">Deadline lewat</div>
+            <div class="pace-figure tnum">${fmtInt(o.remaining)}<span class="unit">orang</span></div>
+            <div class="pace-sub">belum terpenuhi</div>
+          ` : `
+            <div class="pace-eyebrow">Butuh masuk</div>
+            <div class="pace-figure tnum">${fmtDec(o.requiredPace)}<span class="unit">orang</span></div>
+            <div class="pace-sub">setiap hari</div>
+          `}
           <div class="pace-note">${
             avgKnown
               ? `Kecepatan sekarang <b class="tnum">${fmtDec(avgPace)}/hari</b> (gabungan semua cabang).`
@@ -678,7 +707,7 @@ details.table-toggle summary:hover { color: var(--text-strong); }
       const current = d.current, target = d.target, progress = d.progress;
 
       const color = catColor(cat);
-      const tone = paceTone(d.requiredPace, d.avgPace, d.remaining, d.avgKnown);
+      const tone = paceTone(d.requiredPace, d.avgPace, d.remaining, d.avgKnown, d.deadlinePassed);
       const behind = d.remaining > 0 && d.avgKnown && d.requiredPace > d.avgPace;
 
       const art = document.createElement("article");
@@ -698,18 +727,26 @@ details.table-toggle summary:hover { color: var(--text-strong); }
           <div class="br-bar-track"><div class="br-bar-fill" style="width:${Math.min(Math.max(progress, 0), 100)}%"></div></div>
           <div class="br-meta">
             <span class="chip ${d.remaining > 0 ? "chip-alert" : "chip-ok"}">${d.remaining > 0 ? `kurang <b class="tnum">${fmtInt(d.remaining)}</b> peserta` : `<b>target tercapai</b>`}</span>
-            <span class="chip">sisa <b class="tnum">${fmtInt(d.daysLeft)}</b> hari${d.deadline ? ` · s.d. <b>${escapeHtml(d.deadline)}</b>` : ""}</span>
+            <span class="chip${d.remaining > 0 && (d.deadlinePassed || d.daysLeft <= 1) ? " chip-alert" : ""}">${sisaHariText(d.daysLeft, d.deadlinePassed)}${d.deadline ? ` · s.d. <b>${escapeHtml(d.deadline)}</b>` : ""}</span>
             <span class="chip">${d.avgKnown ? `rata-rata masuk <b class="tnum">${fmtDec(d.avgPace)}</b>/hari` : `rata-rata masuk <b>belum ada data</b>`}</span>
             <span class="chip">capaian <b class="tnum">${fmtDec(progress)}%</b></span>
           </div>
         </div>
 
         <div class="pace-box ${tone} br-pace">
-          <div class="pace-eyebrow">Butuh masuk</div>
-          <div class="pace-figure tnum">${fmtDec(d.requiredPace)}<span class="unit">orang</span></div>
-          <div class="pace-sub">setiap hari</div>
+          ${d.deadlinePassed && d.remaining > 0 ? `
+            <div class="pace-eyebrow">Deadline lewat</div>
+            <div class="pace-figure tnum">${fmtInt(d.remaining)}<span class="unit">orang</span></div>
+            <div class="pace-sub">belum terpenuhi</div>
+          ` : `
+            <div class="pace-eyebrow">Butuh masuk</div>
+            <div class="pace-figure tnum">${fmtDec(d.requiredPace)}<span class="unit">orang</span></div>
+            <div class="pace-sub">setiap hari</div>
+          `}
           <div class="pace-note">${
-            d.remaining <= 0
+            d.deadlinePassed && d.remaining > 0
+              ? `Pendaftaran <b>${escapeHtml(d.deadline || "cabang ini")}</b> sudah ditutup.`
+              : d.remaining <= 0
               ? `Sudah <b>mencapai target</b> — jaga momentum.`
               : !d.avgKnown
                 ? `Laju <b>${fmtInt(d.remaining)} peserta</b> dibagi <b>${fmtInt(d.daysLeft)} hari</b> tersisa.`
@@ -738,12 +775,13 @@ details.table-toggle summary:hover { color: var(--text-strong); }
       const current = num(r.Current);
       const target = hasNum(r.Target) && num(r.Target) > 0 ? num(r.Target) : null;
       const remaining = target != null ? Math.max(target - current, 0) : null;
-      const daysLeft = num(r["Days Left"]);
+      const dl = deadlineCountdown(r.Deadline, num(r["Days Left"]));
+      const daysLeft = dl.daysLeft, deadlinePassed = dl.passed;
       const requiredPace = target == null ? null
-        : (hasNum(r["Required Pace"]) ? num(r["Required Pace"]) : (remaining > 0 ? remaining / Math.max(daysLeft, 1) : 0));
+        : (remaining <= 0 ? 0 : (daysLeft > 0 ? remaining / daysLeft : 0));
       const avgKnown = hasNum(r["7D Avg / Day"]);
       list.push({
-        name, current, target, remaining, daysLeft, requiredPace, avgKnown,
+        name, current, target, remaining, daysLeft, deadlinePassed, requiredPace, avgKnown,
         avgPace: avgKnown ? num(r["7D Avg / Day"]) : 0,
         progress: target ? (current / target) * 100 : null,
         wilayah: txt(r.Wilayah).trim() || "Lainnya",
@@ -760,8 +798,11 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     } else if (g.remaining <= 0) {
       tone = "tone-good";
       paceHtml = `<span class="lbl">Status</span><span class="val">✓ <small>tercapai</small></span>`;
+    } else if (g.deadlinePassed) {
+      tone = "tone-crit";
+      paceHtml = `<span class="lbl">Deadline lewat</span><span class="val tnum">${fmtInt(g.remaining)}<small> kurang</small></span>`;
     } else {
-      tone = paceTone(g.requiredPace, g.avgPace, g.remaining, g.avgKnown);
+      tone = paceTone(g.requiredPace, g.avgPace, g.remaining, g.avgKnown, false);
       paceHtml = `<span class="lbl">Butuh masuk</span><span class="val tnum">${fmtDec(g.requiredPace)}<small> /hari</small></span>`;
     }
     const width = g.target ? Math.min(g.progress, 100) : 0;
@@ -803,7 +844,8 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     const totCur = withT.reduce((a, g) => a + g.current, 0);
     const totTgt = withT.reduce((a, g) => a + g.target, 0);
     const done = withT.filter(g => g.remaining <= 0).length;
-    const needDay = withT.reduce((a, g) => a + (g.remaining > 0 ? g.requiredPace : 0), 0);
+    const needDay = withT.reduce((a, g) => a + (g.remaining > 0 && !g.deadlinePassed ? g.requiredPace : 0), 0);
+    const sisa = list.length ? list[0] : null;
 
     // Urutan sengaja mengikuti tab Target_Region (sama dengan tabel target panitia),
     // bukan diperingkat, supaya tidak terkesan membandingkan antarwilayah.
@@ -814,7 +856,8 @@ details.table-toggle summary:hover { color: var(--text-strong); }
         <div class="region-summary">
           <b class="tnum">${fmtInt(totCur)}</b> dari <b class="tnum">${fmtInt(totTgt)}</b> target di ${withT.length} region
           · <b>${done}</b> region sudah tercapai
-          · butuh total <mark class="hl tnum">${fmtDec(needDay)} orang/hari</mark>
+          · ${sisa && sisa.deadlinePassed ? "<b>deadline Olimpiade sudah lewat</b>"
+              : `butuh total <mark class="hl tnum">${fmtDec(needDay)} orang/hari</mark>${sisa && sisa.daysLeft <= 1 ? " (<b>hari terakhir</b>)" : sisa ? ` selama <b class="tnum">${fmtInt(sisa.daysLeft)}</b> hari lagi` : ""}`}
         </div>
       </div>
       <div class="region-list">${body}</div>
@@ -1042,8 +1085,13 @@ details.table-toggle summary:hover { color: var(--text-strong); }
       renderTrendTable(state.trend);
 
       const overall = state.current.find(r => txt(r.Category) === "Overall");
-      const snapDate = overall ? fmtDateLong(overall["Snapshot Date"]) : "";
-      document.getElementById("snapshot-date-label").textContent = snapDate ? "Data per " + snapDate : "";
+      const snapCell = overall ? overall["Snapshot Date"] : null;
+      const snapDate = snapCell ? fmtDateLong(snapCell) : "";
+      const snapD = fmtDate(snapCell);
+      // Sisa hari selalu dihitung dari hari ini; kalau export belum diperbarui, katakan terus terang.
+      const lag = snapD ? dayDiff(startOfToday(), new Date(snapD.getFullYear(), snapD.getMonth(), snapD.getDate())) : 0;
+      document.getElementById("snapshot-date-label").textContent =
+        snapDate ? "Data per " + snapDate + (lag >= 1 ? ` · belum termasuk ${lag === 1 ? "hari ini" : lag + " hari terakhir"}` : "") : "";
       document.getElementById("footer-note").innerHTML =
         `Sumber data: Google Sheet <b>“${escapeHtml(src.name)}”</b>.<br>Dimuat otomatis setiap halaman dibuka.`;
       document.getElementById("live-status").textContent = "Terhubung — data live";
