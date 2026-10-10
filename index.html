@@ -17,6 +17,12 @@
     } catch (e) {
       document.documentElement.setAttribute("data-theme", "light");
     }
+    // Animasi pembuka hanya aktif kalau pembaca tidak meminta gerak dikurangi.
+    try {
+      if (!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) {
+        document.documentElement.classList.add("motion");
+      }
+    } catch (e) {}
   })();
 </script>
 <style>
@@ -43,6 +49,9 @@ html[data-theme="light"] {
   --series-pubpos:    #0f8f62;
   --series-debate:    #a87400;
   --series-wtf:       #c2456f;
+  --series-rtfk:      #6c8a0c;
+  --series-oh1:       #0b86a1;
+  --series-oh2:       #7a4cd0;
 
   --good-fg:  #0b7a2b;  --good-bg:  #e4f4e7;  --good-bd:  #a9dcb6;
   --warn-fg:  #8a5400;  --warn-bg:  #fdf0d5;  --warn-bd:  #eccb8a;
@@ -69,6 +78,9 @@ html[data-theme="dark"] {
   --series-pubpos:    #34c295;
   --series-debate:    #e0ad2e;
   --series-wtf:       #ef7ba3;
+  --series-rtfk:      #a9c93a;
+  --series-oh1:       #45c3de;
+  --series-oh2:       #a98cf2;
 
   --good-fg:  #6ddc8c;  --good-bg:  #16301e;  --good-bd:  #2c5c39;
   --warn-fg:  #f4c451;  --warn-bg:  #332a12;  --warn-bd:  #5e4b1c;
@@ -142,7 +154,7 @@ svg text { font-family: inherit; }
 .hero-label b { color: var(--text-strong); font-weight: 650; }
 .hero-bar-track { height: 16px; border-radius: 8px; background: var(--track); overflow: hidden; }
 .hero-bar-fill { height: 100%; border-radius: 8px; background: linear-gradient(90deg, var(--series-olimpiade), var(--series-pubpos)); transition: width .6s ease; }
-.hero-bar-labels { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--text-muted); }
+.hero-bar-labels { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 3px 14px; margin-top: 8px; font-size: 12px; color: var(--text-muted); }
 .hero-bar-labels b { color: var(--text-strong); font-weight: 700; font-size: 13px; }
 
 /* Kotak sorotan "berapa orang per hari" */
@@ -346,6 +358,40 @@ details.table-toggle summary:hover { color: var(--text-strong); }
 
 .skeleton { background: var(--card-sunken); border-radius: 12px; height: 108px; animation: sk 1.4s ease-in-out infinite; }
 @keyframes sk { 0%,100%{opacity:.55;} 50%{opacity:.9;} }
+
+/* ---------- Kelompok cabang: masih berjalan / sudah ditutup ---------- */
+.group-label {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-muted); margin: 6px 2px 0;
+}
+.group-label:first-child { margin-top: 0; }
+.group-label::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.group-label .n {
+  background: var(--card-sunken); border: 1px solid var(--border-strong);
+  color: var(--text-strong); border-radius: 999px; padding: 1px 8px; letter-spacing: 0;
+}
+
+/* ============================================================
+   ANIMASI PEMBUKA
+   Semua hanya aktif di bawah html.motion (dipasang kalau pembaca tidak memilih
+   "kurangi gerak"). Kelas .reveal disematkan JS hanya saat halaman pertama kali
+   dimuat, jadi ganti tema atau ubah ukuran jendela tidak memutar ulang animasi.
+   ============================================================ */
+@keyframes rise  { from { opacity: 0; transform: translateY(18px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes growW { from { width: 0; } }
+@keyframes ring  { from { stroke-dasharray: 0 400; } }
+@keyframes pop   { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: none; } }
+
+.motion .page-header { animation: rise .8s cubic-bezier(.2,.7,.2,1) both; }
+
+.end-dot { transform-box: fill-box; transform-origin: center; }
+.motion .reveal:not(.in) { opacity: 0; transform: translateY(18px); }
+.motion .reveal.in { animation: rise .75s cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(var(--i, 0) * 80ms); }
+.motion .reveal.in .anim-grow { animation: growW 1.2s cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(var(--i, 0) * 80ms + .25s); }
+.motion .reveal.in .anim-ring { animation: ring 1.3s cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(var(--i, 0) * 80ms + .2s); }
+.motion .reveal.in .anim-pop  { animation: pop .5s cubic-bezier(.2,.9,.3,1.3) both; animation-delay: 1.5s; }
+.motion .reveal.in .anim-status { animation: pop .45s cubic-bezier(.2,.9,.3,1.3) both; animation-delay: calc(var(--i, 0) * 80ms + .5s); }
 </style>
 </head>
 <body>
@@ -372,12 +418,12 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     <div class="state-banner" id="state-banner"></div>
 
     <!-- Ringkasan keseluruhan -->
-    <div class="hero-card" id="hero-card"><div class="skeleton"></div></div>
+    <div class="hero-card" id="hero-card" data-reveal><div class="skeleton"></div></div>
 
     <!-- Satu baris penuh = satu cabang lomba -->
     <div class="section-head">
       <h2>Rincian per cabang lomba</h2>
-      <p><b>Satu baris = satu cabang</b>, lengkap dari komposisi, perolehan, sampai kecepatan pendaftaran.
+      <p><b>Satu baris = satu cabang.</b> Cabang yang masih berjalan ada di paling atas, yang deadline-nya sudah lewat otomatis turun ke bawah.
          Angka yang disorot adalah <mark class="hl">jumlah orang yang harus masuk setiap hari</mark> supaya target cabang itu tercapai tepat waktu.</p>
     </div>
     <div class="branch-list" id="branch-list">
@@ -389,10 +435,10 @@ details.table-toggle summary:hover { color: var(--text-strong); }
       <h2>Target per region — Olimpiade</h2>
       <p>Tiap region punya panitia wilayah dan target sendiri. Yang disorot adalah <mark class="hl">jumlah pendaftar yang harus masuk setiap hari</mark> di region itu sampai deadline Olimpiade.</p>
     </div>
-    <div class="region-card" id="region-card"><div class="skeleton"></div></div>
+    <div class="region-card" id="region-card" data-reveal><div class="skeleton"></div></div>
 
     <!-- Tren harian -->
-    <div class="chart-card">
+    <div class="chart-card" id="trend-card" data-reveal>
       <h2>Tren pendaftaran kumulatif per hari</h2>
       <p class="chart-sub">Garis putus-putus = <b>target tiap cabang</b>. Arahkan kursor untuk melihat angka per tanggal.</p>
       <div class="legend" id="trend-legend"></div>
@@ -410,6 +456,8 @@ details.table-toggle summary:hover { color: var(--text-strong); }
   </div>
 </div>
 
+<!-- Cabang yang belum ada di Google Sheet (Road to FK, Open House 1 & 2). Dibuat oleh scripts/build_extra_branches.py. -->
+<script src="data/extra-branches.js"></script>
 <script>
 (function () {
   // Web hanya membaca sheet PUBLIK berisi rekap. Data mentah peserta ada di file Database
@@ -422,21 +470,28 @@ details.table-toggle summary:hover { color: var(--text-strong); }
   const GVIZ = (id, sheet) =>
     `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(sheet)}`;
 
-  const CATEGORY_COLOR = {
-    "Olimpiade": "--series-olimpiade",
-    "Scientific Paper": "--series-scipap",
-    "Public Poster": "--series-pubpos",
-    "Debate": "--series-debate",
-    "WTF": "--series-wtf"
-  };
-  const CATEGORY_ORDER = ["Olimpiade", "Scientific Paper", "Public Poster", "Debate", "WTF"];
-  const CATEGORY_SHORT = {
-    "Olimpiade": "Olimpiade",
-    "Scientific Paper": "Sci. Paper",
-    "Public Poster": "Poster",
-    "Debate": "Debate",
-    "WTF": "WTF"
-  };
+  // Daftar semua cabang. Urutan di sini hanya dipakai untuk legend, warna, dan penentu
+  // urutan saat dua cabang seri; urutan tampil di halaman ditentukan oleh deadline.
+  // Cabang yang ada di Google Sheet dibaca live dari sana; Road to FK, Open House 1 & 2
+  // bersumber dari data/extra-branches.js sampai baris-barisnya ditambahkan ke sheet.
+  const CATEGORIES = [
+    { key: "Olimpiade",        color: "--series-olimpiade", short: "Olimpiade" },
+    { key: "Scientific Paper", color: "--series-scipap",    short: "Sci. Paper" },
+    { key: "Public Poster",    color: "--series-pubpos",    short: "Poster" },
+    { key: "Debate",           color: "--series-debate",    short: "Debate" },
+    { key: "WTF",              color: "--series-wtf",       short: "WTF" },
+    { key: "Road to FK",       color: "--series-rtfk",      short: "Road to FK" },
+    { key: "Open House 1",     color: "--series-oh1",       short: "OH 1" },
+    { key: "Open House 2",     color: "--series-oh2",       short: "OH 2" }
+  ];
+  const CATEGORY_ORDER = CATEGORIES.map(c => c.key);
+  const CATEGORY_COLOR = Object.fromEntries(CATEGORIES.map(c => [c.key, c.color]));
+  const CATEGORY_SHORT = Object.fromEntries(CATEGORIES.map(c => [c.key, c.short]));
+
+  const MOTION = document.documentElement.classList.contains("motion");
+  // true hanya selama render pertama setelah halaman dimuat / "Muat ulang".
+  let playIntro = false;
+  const anim = (cls) => (playIntro && MOTION ? " " + cls : "");
 
   const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const catColor = (cat) => cssVar(CATEGORY_COLOR[cat] || "--text-muted");
@@ -530,6 +585,9 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     return null;
   }
   const fmtDateShort = (d) => d.toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
+  const fmtDateYear = (d) => d.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
+  const isoDay = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  function parseIso(s) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ""); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
   // Tengah malam hari ini menurut jam perangkat pembaca.
   function startOfToday() { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); }
   const dayDiff = (a, b) => Math.round((a - b) / 86400000);   // selisih hari, bebas dari jam & DST
@@ -541,6 +599,7 @@ details.table-toggle summary:hover { color: var(--text-strong); }
   const svgEl = (tag) => document.createElementNS("http://www.w3.org/2000/svg", tag);
 
   function statusPillClass(status) {
+    if (/selesai|closed|ditutup/i.test(status)) return "pill-neutral";
     if (/target met|on track|ahead|good|aman|tercapai/i.test(status)) return "pill-good";
     if (/critical|behind|urgent|danger/i.test(status)) return "pill-crit";
     if (/in progress/i.test(status)) return "pill-neutral";
@@ -576,7 +635,87 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     return rows.map(r => { const o = {}; cols.forEach((c, i) => o[c] = r[i] || null); return o; });
   }
 
-  const state = { current: null, trend: null, regions: null, source: null };
+  const state = { current: null, trend: null, regions: null, source: null, extras: [] };
+
+  /* ---------- Cabang tambahan dari data/extra-branches.js ---------- */
+  const cell = (v) => ({ v: v === undefined ? null : v, f: null });
+
+  // Membuat baris Current_Looker & Trend_Looker tiruan untuk cabang yang belum punya baris di
+  // sheet, dengan bentuk yang sama seperti hasil toObjects, supaya semua render di bawahnya
+  // tidak perlu tahu asal datanya. Begitu sheet punya baris dengan nama yang sama, sheet menang.
+  function withExtras(currentRows, trendRows) {
+    const X = window.MEDSPIN_EXTRA;
+    const snap = X ? parseIso(X.snapshot) : null;
+    if (!X || !Array.isArray(X.branches) || !snap) return { current: currentRows, trend: trendRows, used: [] };
+
+    const have = new Set(currentRows.map(r => txt(r.Category).trim()));
+    const times = trendRows.map(r => fmtDate(r.Date)).filter(Boolean).map(d => d.getTime());
+    const sheetStart = times.length ? new Date(Math.min.apply(null, times)) : null;
+    const addCur = [], addTrend = [], used = [];
+
+    X.branches.forEach(b => {
+      const first = parseIso(b.first), last = parseIso(b.last);
+      if (have.has(b.name) || !first || !last) return;
+      const deadline = parseIso(b.deadline);
+      const target = b.target > 0 ? b.target : 0;
+
+      // Kumulatif harian dari awal grafik sheet (supaya garisnya mulai dari 0 seperti cabang lain).
+      const cum = {};
+      let run = 0;
+      for (let d = new Date(sheetStart && sheetStart < first ? sheetStart : first); d <= snap; d.setDate(d.getDate() + 1)) {
+        run += (b.daily && b.daily[isoDay(d)]) || 0;
+        cum[isoDay(d)] = run;
+        addTrend.push({ Date: cell(new Date(d)), Category: cell(b.name), Quantity: cell(run), Target: cell(target) });
+      }
+      const weekAgo = new Date(snap); weekAgo.setDate(weekAgo.getDate() - 7);
+      const avg7 = ((cum[isoDay(snap)] || 0) - (cum[isoDay(weekAgo)] || 0)) / 7;
+
+      const remaining = Math.max(target - b.total, 0);
+      const left = deadline ? deadlineCountdown(cell(deadline), 0) : null;
+      const required = left && left.daysLeft > 0 ? remaining / left.daysLeft : remaining;
+      const status = !target ? "Selesai" : remaining <= 0 ? "Target met" : avg7 >= required ? "On track" : "Below pace";
+
+      addCur.push({
+        Category: cell(b.name), Current: cell(b.total), Target: cell(target || null), Deadline: cell(deadline),
+        "7D Avg / Day": cell(avg7), Status: cell(status), "Snapshot Date": cell(snap),
+        __extra: { closed: !!b.closed, first, last }
+      });
+      used.push(b.name);
+    });
+    used.sort((a, b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b));
+    return { current: currentRows.concat(addCur), trend: trendRows.concat(addTrend), used };
+  }
+
+  /* ---------- Animasi saat bagian halaman pertama kali terlihat ---------- */
+  let revealIO = null;
+  function resetReveal() {
+    if (!MOTION) return;
+    if (revealIO) revealIO.disconnect();
+    document.querySelectorAll("[data-reveal]").forEach(el => { el.classList.remove("in"); el.classList.add("reveal"); });
+  }
+  function onRevealed(el) {
+    el.querySelectorAll("[data-count]").forEach(countUp);
+    el.querySelectorAll("path[data-draw]").forEach((p, i) => {
+      p.style.transition = `stroke-dashoffset 1.7s cubic-bezier(.2,.7,.2,1) ${i * 90}ms`;
+      p.style.strokeDashoffset = "0";
+      p.removeAttribute("data-draw");
+    });
+  }
+  function armReveal() {
+    if (!MOTION) return;
+    const els = Array.from(document.querySelectorAll(".reveal:not(.in)"));
+    const show = (el) => { el.classList.add("in"); onRevealed(el); };
+    if (!("IntersectionObserver" in window)) { els.forEach(show); return; }
+    revealIO = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.isIntersecting) { revealIO.unobserve(e.target); show(e.target); } });
+    }, { threshold: 0.12 });
+    els.forEach(el => revealIO.observe(el));
+  }
+  // Bagian yang belum pernah di-scroll ke layar tetap tak terlihat sampai disentuh; saat dicetak
+  // / disimpan jadi PDF semuanya harus muncul tanpa menunggu.
+  window.addEventListener("beforeprint", () => {
+    document.querySelectorAll(".reveal:not(.in)").forEach(el => { el.classList.add("in"); onRevealed(el); });
+  });
 
 
   /* ---------- Hitung mundur ke deadline, dari hari ini ---------- */
@@ -601,9 +740,17 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     // Sisa hari dihitung dari HARI INI, bukan dari tanggal data. Kolom "Days Left" di sheet
     // memakai tanggal snapshot, jadi ikut tertinggal kalau export belum diperbarui hari ini.
     const dl = deadlineCountdown(row.Deadline, num(row["Days Left"]));
-    const daysLeft = dl.daysLeft, deadlinePassed = dl.passed;
+    // Cabang arsip (Road to FK, Open House 1) ditandai ditutup walau tidak punya tanggal deadline.
+    const extra = row.__extra || null;
+    const forcedClosed = !!(extra && extra.closed);
+    const daysLeft = forcedClosed ? 0 : dl.daysLeft, deadlinePassed = dl.passed || forcedClosed;
+    const noTarget = !(target > 0);
     // Dihitung langsung supaya capaian di atas 100% (mis. 506/500) tidak salah dibaca sebagai 1,0%.
     const progress = target > 0 ? (current / target) * 100 : parsePercent(row.Progress);
+    const deadlineDate = fmtDate(row.Deadline);
+    const lastDate = extra ? extra.last : null;
+    // Penentu urutan di antara cabang yang sudah ditutup: yang baru saja tutup paling atas.
+    const endTs = deadlineDate ? deadlineDate.getTime() : (lastDate ? lastDate.getTime() : 0);
     // Required Pace dari sheet ikut memakai sisa hari yang lama, jadi dihitung ulang di sini.
     const requiredPace = remaining <= 0 ? 0 : (daysLeft > 0 ? remaining / daysLeft : 0);
     const avgKnown = hasNum(row["7D Avg / Day"]);
@@ -611,63 +758,115 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     const paceGap = Math.max(requiredPace - avgPace, 0);
     return {
       current, target, remaining, daysLeft, deadlinePassed, progress, requiredPace, avgPace, avgKnown, paceGap,
+      noTarget, endTs, firstDate: extra ? extra.first : null, lastDate,
       status: txt(row.Status),
       deadline: fmtDateLong(row.Deadline),
       snapshot: fmtDateLong(row["Snapshot Date"])
     };
   }
 
-  /* ---------- Hero ---------- */
+  /* ---------- Satu entri per cabang, sudah berupa angka siap pakai ---------- */
+  function buildItems(currentRows) {
+    return CATEGORY_ORDER.map((cat, idx) => {
+      const row = currentRows.find(r => txt(r.Category).trim() === cat);
+      return row ? { cat, idx, d: readRow(row) } : null;
+    }).filter(Boolean);
+  }
+  // Yang masih berjalan di atas (deadline terdekat paling atas); yang deadline-nya sudah
+  // lewat turun ke bawah (yang paling baru tutup paling atas).
+  function splitByDeadline(items) {
+    const openKey = (x) => x.d.endTs || Infinity;
+    const active = items.filter(i => !i.d.deadlinePassed)
+      .sort((a, b) => (openKey(a) - openKey(b)) || (a.idx - b.idx));
+    const closed = items.filter(i => i.d.deadlinePassed)
+      .sort((a, b) => (b.d.endTs - a.d.endTs) || (a.idx - b.idx));
+    return { active, closed };
+  }
+
+  /* Angka yang dihitung naik dari 0 saat dibuka. Nilai akhir tetap ditulis di teksnya,
+     jadi kalau animasi mati (atau saat ganti tema) angkanya langsung benar. */
+  const cnt = (n, dec) => (playIntro && MOTION ? ` data-count="${n}"${dec ? ` data-dec="${dec}"` : ""}` : "");
+  function countUp(el) {
+    const to = parseFloat(el.dataset.count), dec = +el.dataset.dec || 0;
+    const fmt = dec ? fmtDec : fmtInt;
+    if (!isFinite(to)) return;
+    const t0 = performance.now();
+    el.textContent = fmt(0);
+    (function tick(now) {
+      const p = Math.min((now - t0) / 1300, 1);
+      el.textContent = fmt(to * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) requestAnimationFrame(tick);
+    })(t0);
+  }
+
+  /* ---------- Hero: total peserta fix dari semua cabang ---------- */
   function renderHero(currentRows) {
     const hero = document.getElementById("hero-card");
-    const overallRow = currentRows.find(r => txt(r.Category) === "Overall");
-    if (!overallRow) { hero.innerHTML = ""; return; }
-    const o = readRow(overallRow);
+    const items = buildItems(currentRows);
+    if (!items.length) { hero.innerHTML = ""; return; }
 
-    // Sheet mengosongkan 7D Avg untuk Overall — jumlahkan laju tiap cabang.
-    let avgPace = o.avgPace, avgKnown = o.avgKnown;
-    if (!avgKnown) {
-      let sum = 0, found = false;
-      CATEGORY_ORDER.forEach(cat => {
-        const r = currentRows.find(x => txt(x.Category) === cat);
-        if (r && hasNum(r["7D Avg / Day"])) { sum += num(r["7D Avg / Day"]); found = true; }
-      });
-      if (found) { avgPace = sum; avgKnown = true; }
-    }
-    const tone = paceTone(o.requiredPace, avgPace, o.remaining, avgKnown, o.deadlinePassed);
+    const total = items.reduce((a, i) => a + i.d.current, 0);
+    const targeted = items.filter(i => !i.d.noTarget);
+    const sumTarget = targeted.reduce((a, i) => a + i.d.target, 0);
+    const sumTargetCur = targeted.reduce((a, i) => a + i.d.current, 0);
+    const progress = sumTarget > 0 ? (sumTargetCur / sumTarget) * 100 : 0;
+    const noTargetNames = items.filter(i => i.d.noTarget).map(i => i.cat);
+
+    // Kebutuhan & kecepatan hanya dihitung dari cabang yang masih berjalan; tiap cabang
+    // punya deadline sendiri, jadi kebutuhan per hari dijumlahkan per cabang.
+    const active = items.filter(i => !i.d.deadlinePassed);
+    const allClosed = active.length === 0;
+    const remaining = active.reduce((a, i) => a + i.d.remaining, 0);
+    const needDay = active.reduce((a, i) => a + i.d.requiredPace, 0);
+    const avgKnown = active.some(i => i.d.avgKnown);
+    const avgPace = active.reduce((a, i) => a + i.d.avgPace, 0);
+    const missed = targeted.reduce((a, i) => a + i.d.remaining, 0);
+    const farthest = active.reduce((m, i) => (!m || i.d.endTs > m.endTs ? i.d : m), null);
+    const tone = allClosed ? (missed > 0 ? "tone-crit" : "tone-good")
+      : paceTone(needDay, avgPace, remaining, avgKnown, false);
 
     hero.innerHTML = `
       <div class="hero-grid">
         <div>
-          <div class="eyebrow">Total seluruh cabang</div>
-          <div class="hero-figure tnum">${fmtInt(o.current)}<span class="of"> / ${fmtInt(o.target)}</span></div>
-          <div class="hero-label">peserta terdaftar · ${
-            o.deadlinePassed ? "<b>semua deadline sudah lewat</b>"
-            : o.daysLeft <= 1 ? "<b>hari terakhir</b>"
-            : `<b>${fmtInt(o.daysLeft)} hari</b> menuju deadline terjauh`
-          }${o.deadline ? " (" + escapeHtml(o.deadline) + ")" : ""}</div>
+          <div class="eyebrow">Total peserta fix · semua cabang</div>
+          <div class="hero-figure tnum"><span${cnt(total)}>${fmtInt(total)}</span></div>
+          <div class="hero-label">peserta terdaftar dari <b>${items.length} cabang</b> · ${
+            allClosed ? "<b>semua deadline sudah lewat</b>"
+            : `<b>${active.length}</b> masih berjalan${items.length - active.length ? `, ${items.length - active.length} sudah ditutup` : ""}`
+          }</div>
+          ${farthest && farthest.deadline ? `<div class="hero-label">deadline terjauh <b>${escapeHtml(farthest.deadline)}</b> · ${sisaHariText(farthest.daysLeft, false)}</div>` : ""}
+          ${noTargetNames.length ? `<div class="hero-label" style="color:var(--text-muted);font-size:12px">Sudah termasuk ${escapeHtml(noTargetNames.join(" dan "))} (ditutup, tanpa target).</div>` : ""}
         </div>
         <div>
           <div class="eyebrow">Capaian terhadap target</div>
-          <div class="hero-bar-track"><div class="hero-bar-fill" style="width:${Math.min(Math.max(o.progress, 0), 100)}%"></div></div>
+          <div class="hero-bar-track"><div class="hero-bar-fill${anim("anim-grow")}" style="width:${Math.min(Math.max(progress, 0), 100)}%"></div></div>
           <div class="hero-bar-labels">
-            <span><b class="tnum">${fmtDec(o.progress)}%</b> tercapai</span>
-            <span>${o.remaining > 0 ? `masih kurang <b class="tnum">${fmtInt(o.remaining)}</b> peserta` : "<b>target terpenuhi</b>"}</span>
+            <span><b class="tnum"><span${cnt(progress.toFixed(1), 1)}>${fmtDec(progress)}</span>%</b> dari target <span class="tnum">${fmtInt(sumTarget)}</span></span>
+            <span>${
+              allClosed ? "<b>semua cabang sudah ditutup</b>"
+              : remaining > 0 ? `kurang <b class="tnum">${fmtInt(remaining)}</b> di cabang yang berjalan`
+              : "<b>target cabang yang berjalan terpenuhi</b>"
+            }</span>
           </div>
         </div>
         <div class="pace-box ${tone}">
-          ${o.deadlinePassed && o.remaining > 0 ? `
+          ${allClosed ? (missed > 0 ? `
             <div class="pace-eyebrow">Deadline lewat</div>
-            <div class="pace-figure tnum">${fmtInt(o.remaining)}<span class="unit">orang</span></div>
+            <div class="pace-figure tnum">${fmtInt(missed)}<span class="unit">orang</span></div>
             <div class="pace-sub">belum terpenuhi</div>
           ` : `
+            <div class="pace-eyebrow">Status</div>
+            <div class="pace-figure tnum">✓<span class="unit">selesai</span></div>
+            <div class="pace-sub">semua target terpenuhi</div>
+          `) : `
             <div class="pace-eyebrow">Butuh masuk</div>
-            <div class="pace-figure tnum">${fmtDec(o.requiredPace)}<span class="unit">orang</span></div>
+            <div class="pace-figure tnum"><span${cnt(needDay.toFixed(1), 1)}>${fmtDec(needDay)}</span><span class="unit">orang</span></div>
             <div class="pace-sub">setiap hari</div>
           `}
           <div class="pace-note">${
-            avgKnown
-              ? `Kecepatan sekarang <b class="tnum">${fmtDec(avgPace)}/hari</b> (gabungan semua cabang).`
+            allClosed ? `Pendaftaran semua cabang sudah ditutup.`
+            : avgKnown
+              ? `Kecepatan sekarang <b class="tnum">${fmtDec(avgPace)}/hari</b> (gabungan cabang yang masih berjalan).`
               : `Kecepatan 7 hari terakhir belum tersedia.`
           }</div>
         </div>
@@ -676,55 +875,41 @@ details.table-toggle summary:hover { color: var(--text-strong); }
   }
 
   /* ---------- Donut kecil per cabang ---------- */
-  function donutMarkup(progress, color, size) {
+  function donutMarkup(progress, color, size, cap) {
     const r = size / 2 - 7, circ = 2 * Math.PI * r;
     const pct = Math.min(Math.max(progress, 0), 100);
     const dash = (pct / 100) * circ;
     return `
-      <svg viewBox="0 0 ${size} ${size}" role="img" aria-label="${fmtDec(pct)} persen dari target">
+      <svg viewBox="0 0 ${size} ${size}" role="img" aria-label="${cap ? "pendaftaran sudah ditutup" : fmtDec(pct) + " persen dari target"}">
         <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${cssVar('--track')}" stroke-width="11"/>
-        <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="11"
+        <circle class="ring-arc${anim("anim-ring")}" cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="11"
           stroke-dasharray="${dash} ${circ - dash}" stroke-linecap="round"
           transform="rotate(-90 ${size / 2} ${size / 2})"/>
       </svg>
       <div class="d-caption">
-        <span class="d-pct tnum">${Math.round(Math.max(progress, 0))}%</span>
-        <span class="d-word">tercapai</span>
+        <span class="d-pct tnum">${cap ? escapeHtml(cap.pct) : Math.round(Math.max(progress, 0)) + "%"}</span>
+        <span class="d-word">${cap ? escapeHtml(cap.word) : "tercapai"}</span>
       </div>
     `;
   }
 
-  /* ---------- SATU BARIS PENUH = SATU CABANG LOMBA ---------- */
-  function renderBranchRows(currentRows) {
-    const list = document.getElementById("branch-list");
-    list.innerHTML = "";
-
-    CATEGORY_ORDER.forEach(cat => {
-      const row = currentRows.find(r => txt(r.Category) === cat);
-      if (!row) return;
-      const d = readRow(row);
-
-      const current = d.current, target = d.target, progress = d.progress;
-
-      const color = catColor(cat);
-      const tone = paceTone(d.requiredPace, d.avgPace, d.remaining, d.avgKnown, d.deadlinePassed);
-      const behind = d.remaining > 0 && d.avgKnown && d.requiredPace > d.avgPace;
-
-      const art = document.createElement("article");
-      art.className = "branch-row";
-      art.style.setProperty("--c", color);
-      art.innerHTML = `
+  /* ---------- Isi satu baris cabang yang punya target ---------- */
+  function liveRowInner(cat, d, color) {
+    const progress = d.progress;
+    const tone = paceTone(d.requiredPace, d.avgPace, d.remaining, d.avgKnown, d.deadlinePassed);
+    const behind = d.remaining > 0 && d.avgKnown && d.requiredPace > d.avgPace;
+    return `
         <div class="br-donut">${donutMarkup(progress, color, 92)}</div>
 
         <div class="br-main">
           <div class="br-head">
             <span class="br-name">${escapeHtml(cat)}</span>
-            ${d.status ? `<span class="status-pill ${statusPillClass(d.status)}"><span class="ic"></span>${escapeHtml(d.status)}</span>` : ""}
+            ${d.status ? `<span class="status-pill ${statusPillClass(d.status)}${anim("anim-status")}"><span class="ic"></span>${escapeHtml(d.status)}</span>` : ""}
           </div>
           <div class="br-count">
-            <span class="big tnum">${fmtInt(current)}</span><span class="of"> dari ${fmtInt(target)} peserta</span>
+            <span class="big tnum"${cnt(d.current)}>${fmtInt(d.current)}</span><span class="of"> dari ${fmtInt(d.target)} peserta</span>
           </div>
-          <div class="br-bar-track"><div class="br-bar-fill" style="width:${Math.min(Math.max(progress, 0), 100)}%"></div></div>
+          <div class="br-bar-track"><div class="br-bar-fill${anim("anim-grow")}" style="width:${Math.min(Math.max(progress, 0), 100)}%"></div></div>
           <div class="br-meta">
             <span class="chip ${d.remaining > 0 ? "chip-alert" : "chip-ok"}">${d.remaining > 0 ? `kurang <b class="tnum">${fmtInt(d.remaining)}</b> peserta` : `<b>target tercapai</b>`}</span>
             <span class="chip${d.remaining > 0 && (d.deadlinePassed || d.daysLeft <= 1) ? " chip-alert" : ""}">${sisaHariText(d.daysLeft, d.deadlinePassed)}${d.deadline ? ` · s.d. <b>${escapeHtml(d.deadline)}</b>` : ""}</span>
@@ -740,7 +925,7 @@ details.table-toggle summary:hover { color: var(--text-strong); }
             <div class="pace-sub">belum terpenuhi</div>
           ` : `
             <div class="pace-eyebrow">Butuh masuk</div>
-            <div class="pace-figure tnum">${fmtDec(d.requiredPace)}<span class="unit">orang</span></div>
+            <div class="pace-figure tnum"><span${cnt(d.requiredPace.toFixed(1), 1)}>${fmtDec(d.requiredPace)}</span><span class="unit">orang</span></div>
             <div class="pace-sub">setiap hari</div>
           `}
           <div class="pace-note">${
@@ -756,8 +941,62 @@ details.table-toggle summary:hover { color: var(--text-strong); }
           }</div>
         </div>
       `;
-      list.appendChild(art);
-    });
+  }
+
+  /* ---------- Isi satu baris cabang arsip: ditutup, hasil akhir saja ---------- */
+  function archivedRowInner(cat, d, color) {
+    const span = d.firstDate && d.lastDate ? dayDiff(d.lastDate, d.firstDate) + 1 : 0;
+    return `
+        <div class="br-donut">${donutMarkup(100, color, 92, { pct: "Final", word: "ditutup" })}</div>
+
+        <div class="br-main">
+          <div class="br-head">
+            <span class="br-name">${escapeHtml(cat)}</span>
+            <span class="status-pill pill-neutral${anim("anim-status")}"><span class="ic"></span>Selesai</span>
+          </div>
+          <div class="br-count">
+            <span class="big tnum"${cnt(d.current)}>${fmtInt(d.current)}</span><span class="of"> peserta (hasil akhir)</span>
+          </div>
+          <div class="br-meta">
+            ${d.firstDate && d.lastDate ? `<span class="chip">periode bayar <b>${fmtDateShort(d.firstDate)} – ${fmtDateYear(d.lastDate)}</b></span>` : ""}
+            ${span > 0 ? `<span class="chip">rata-rata masuk <b class="tnum">${fmtDec(d.current / span)}</b>/hari selama periode</span>` : ""}
+          </div>
+        </div>
+
+        <div class="pace-box tone-neutral br-pace">
+          <div class="pace-eyebrow">Pendaftaran ditutup</div>
+          <div class="pace-figure tnum">${d.lastDate ? fmtDateShort(d.lastDate) : "–"}</div>
+          <div class="pace-sub">pembayaran terakhir</div>
+          <div class="pace-note">Tanpa target — <b class="tnum">${fmtInt(d.current)}</b> peserta masuk ke total fix.</div>
+        </div>
+      `;
+  }
+
+  /* ---------- SATU BARIS PENUH = SATU CABANG LOMBA ---------- */
+  function renderBranchRows(currentRows) {
+    const list = document.getElementById("branch-list");
+    list.innerHTML = "";
+    const { active, closed } = splitByDeadline(buildItems(currentRows));
+
+    let n = 0;
+    const addGroup = (label, arr) => {
+      if (!arr.length) return;
+      const head = document.createElement("div");
+      head.className = "group-label";
+      head.innerHTML = `${escapeHtml(label)} <span class="n tnum">${arr.length}</span>`;
+      list.appendChild(head);
+      arr.forEach(({ cat, d }) => {
+        const color = catColor(cat);
+        const art = document.createElement("article");
+        art.className = "branch-row" + (playIntro && MOTION ? " reveal" : "");
+        art.style.setProperty("--c", color);
+        art.style.setProperty("--i", Math.min(n++, 5));
+        art.innerHTML = d.noTarget ? archivedRowInner(cat, d, color) : liveRowInner(cat, d, color);
+        list.appendChild(art);
+      });
+    };
+    addGroup("Masih berjalan", active);
+    addGroup("Sudah ditutup", closed);
   }
 
   /* ---------- Per region (Olimpiade) ---------- */
@@ -818,7 +1057,7 @@ details.table-toggle summary:hover { color: var(--text-strong); }
         </div>
         <div class="rg-mid">
           <div class="rg-bar" role="img" aria-label="${g.target ? fmtDec(g.progress) + ' persen dari target' : 'target belum diisi'}">
-            <div class="rg-fill" style="width:${width}%"></div>
+            <div class="rg-fill${anim("anim-grow")}" style="width:${width}%"></div>
           </div>
           <div class="rg-meta"><b class="tnum">${fmtInt(g.current)}</b>${g.target ? ` dari <b class="tnum">${fmtInt(g.target)}</b> (${fmtDec(g.progress)}%)` : " pendaftar"}${gap}${pace7}</div>
         </div>
@@ -955,9 +1194,17 @@ details.table-toggle summary:hover { color: var(--text-strong); }
       path.setAttribute("stroke-linejoin", "round");
       path.setAttribute("stroke-linecap", "round");
       svg.appendChild(path);
+      if (playIntro && MOTION) {
+        // Garis digambar dari kiri ke kanan begitu kartu tren terlihat (lihat onRevealed).
+        const len = path.getTotalLength();
+        path.style.strokeDasharray = len;
+        path.style.strokeDashoffset = len;
+        path.setAttribute("data-draw", "1");
+      }
 
       const last = points[points.length - 1];
       const dot = svgEl("circle");
+      dot.setAttribute("class", "end-dot" + anim("anim-pop"));
       dot.setAttribute("cx", xScale(last.date)); dot.setAttribute("cy", yScale(last.value));
       dot.setAttribute("r", 4); dot.setAttribute("fill", color);
       dot.setAttribute("stroke", cssVar("--card")); dot.setAttribute("stroke-width", 2);
@@ -1009,7 +1256,8 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     const table = document.getElementById("trend-table");
     const keyed = trendRows.map(r => {
       const d = fmtDate(r.Date);
-      return d ? { key: d.toISOString().slice(0, 10), cat: txt(r.Category), qty: num(r.Quantity) } : null;
+      // toISOString() menggeser tanggal satu hari mundur di zona waktu UTC+7; pakai tanggal lokal.
+      return d ? { key: isoDay(d), cat: txt(r.Category), qty: num(r.Quantity) } : null;
     }).filter(Boolean);
     const dates = [...new Set(keyed.map(r => r.key))].sort().slice(-14);
     let html = "<thead><tr><th>Tanggal</th>" + CATEGORY_ORDER.map(c => `<th>${escapeHtml(CATEGORY_SHORT[c] || c)}</th>`).join("") + "</tr></thead><tbody>";
@@ -1059,9 +1307,11 @@ details.table-toggle summary:hover { color: var(--text-strong); }
       fetchGviz(src.id, "Trend_Looker"),
       src.hasRegion ? fetchGviz(src.id, "Region_Looker").catch(() => null) : Promise.resolve(null)
     ]);
+    const merged = withExtras(currentRows, toObjects(trend.cols, trend.rows));
     return {
-      current: currentRows,
-      trend: toObjects(trend.cols, trend.rows),
+      current: merged.current,
+      trend: merged.trend,
+      extras: merged.used,
       regions: region ? readRegions(toObjects(region.cols, region.rows)) : null
     };
   }
@@ -1075,14 +1325,18 @@ details.table-toggle summary:hover { color: var(--text-strong); }
       catch (err) { console.warn(src.name, err); failures.push(src.name + ": " + err.message); continue; }
 
       state.current = data.current; state.trend = data.trend;
-      state.regions = data.regions; state.source = src;
+      state.regions = data.regions; state.source = src; state.extras = data.extras;
 
+      playIntro = true;
+      resetReveal();
       renderHero(state.current);
       renderBranchRows(state.current);
       renderRegions();
       renderTrendLegend();
       renderTrendChart(state.trend);
       renderTrendTable(state.trend);
+      armReveal();
+      playIntro = false;
 
       const overall = state.current.find(r => txt(r.Category) === "Overall");
       const snapCell = overall ? overall["Snapshot Date"] : null;
@@ -1093,7 +1347,10 @@ details.table-toggle summary:hover { color: var(--text-strong); }
       document.getElementById("snapshot-date-label").textContent =
         snapDate ? "Data per " + snapDate + (lag >= 1 ? ` · belum termasuk ${lag === 1 ? "hari ini" : lag + " hari terakhir"}` : "") : "";
       document.getElementById("footer-note").innerHTML =
-        `Sumber data: Google Sheet <b>“${escapeHtml(src.name)}”</b>.<br>Dimuat otomatis setiap halaman dibuka.`;
+        `Sumber data: Google Sheet <b>“${escapeHtml(src.name)}”</b>.<br>Dimuat otomatis setiap halaman dibuka.` +
+        (state.extras.length
+          ? `<br>${escapeHtml(state.extras.join(", "))} dihitung dari file Excel peserta sudah bayar (data per ${fmtDateYear(parseIso(window.MEDSPIN_EXTRA.snapshot))}).`
+          : "");
       document.getElementById("live-status").textContent = "Terhubung — data live";
       if (src === SOURCES[0]) hideBanner();
       else showBanner("Web sementara membaca sheet lama karena sheet baru belum siap (" + failures.join("; ") +
