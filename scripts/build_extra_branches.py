@@ -83,7 +83,19 @@ def main():
             "daily": {d.isoformat(): n for d, n in sorted(days.items())},
         })
 
-    payload = {"snapshot": snapshot.isoformat(), "source": os.path.basename(src), "branches": out}
+    # Jumlah pendaftar Olimpiade per region. Dipakai dashboard wilayah untuk memecah baris
+    # "Region lain" di sheet (mis. Surabaya dan Online) yang di sheet hanya muncul sebagai satu angka.
+    regions = collections.Counter(
+        str(r[col["Region"]]).strip().upper()
+        for r in data if str(r[col["Cabang"]]).strip().upper().startswith("OLIMPIADE")
+    )
+
+    payload = {
+        "snapshot": snapshot.isoformat(),
+        "source": os.path.basename(src),
+        "branches": out,
+        "olimpiadeRegions": dict(sorted(regions.items())),
+    }
     with open(OUT, "w", encoding="utf-8") as f:
         f.write("// DIBUAT OTOMATIS oleh scripts/build_extra_branches.py. Jangan diedit tangan.\n")
         f.write("window.MEDSPIN_EXTRA = ")
@@ -93,6 +105,7 @@ def main():
     print(f"Data per {snapshot}")
     for b in out:
         print(f"  {b['name']}: {b['total']} peserta ({b['first']} s.d. {b['last']})")
+    print(f"  Olimpiade per region: {len(regions)} region, {sum(regions.values())} peserta")
 
 
 if __name__ == "__main__":

@@ -346,6 +346,18 @@ details.table-toggle summary:hover { color: var(--text-strong); }
 .rg-pace .val small { font-size: 11.5px; font-weight: 650; letter-spacing: 0; }
 .region-note { font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--gridline); padding-top: 10px; margin-top: 4px; }
 .region-note b { color: var(--text-strong); }
+
+/* Pendaftar yang tidak punya baris di tabel region (mis. Surabaya, Online) */
+.region-other { background: var(--card-sunken); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px 11px; margin: 4px 0 10px; }
+.ro-title { font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 9px; }
+.ro-title span { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.ro-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.ro-tile { background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--c, var(--border-strong)); border-radius: 10px; padding: 9px 12px 8px; }
+.ro-name { display: block; font-size: 12px; font-weight: 650; color: var(--text); }
+.ro-val { font-size: 26px; font-weight: 780; letter-spacing: -0.02em; line-height: 1.15; color: var(--text-strong); }
+.ro-pct { font-size: 11.5px; color: var(--text-muted); margin-left: 6px; }
+.ro-eq { margin-top: 9px; font-size: 12px; color: var(--text-muted); }
+.ro-eq b { color: var(--text-strong); }
 .region-empty { font-size: 13px; color: var(--text); padding: 10px 0; }
 @media (max-width: 640px) {
   .region-row { grid-template-columns: 1fr auto; grid-template-areas: "name pace" "bar bar"; gap: 8px 12px; }
@@ -1065,6 +1077,19 @@ details.table-toggle summary:hover { color: var(--text-strong); }
       </div>`;
   }
 
+  // Sheet hanya menyimpan satu angka untuk "Region lain" beserta daftar namanya (mis. "ONLINE, SURABAYA").
+  // Pecahan per nama diambil dari data/extra-branches.js. Kalau ada nama yang tidak dikenal, kembalikan
+  // null supaya tampilan jatuh ke catatan lama dan tidak menampilkan angka setengah-setengah.
+  function otherBreakdown(other) {
+    const R = window.MEDSPIN_EXTRA && window.MEDSPIN_EXTRA.olimpiadeRegions;
+    if (!R || !other.names) return null;
+    const parts = other.names.split(/[,;&]|\bdan\b/i).map(s => s.trim().toUpperCase()).filter(Boolean);
+    if (!parts.length || !parts.every(n => Object.prototype.hasOwnProperty.call(R, n))) return null;
+    const items = parts.map(n => ({ name: n.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()), count: R[n] }))
+      .sort((a, b) => b.count - a.count);
+    return { items, sum: items.reduce((a, i) => a + i.count, 0) };
+  }
+
   function renderRegions() {
     const card = document.getElementById("region-card");
     if (!state.source || !state.source.hasRegion) {
@@ -1090,6 +1115,32 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     // bukan diperingkat, supaya tidak terkesan membandingkan antarwilayah.
     const body = list.map(regionRowHtml).join("");
 
+    const split = other.count > 0 ? otherBreakdown(other) : null;
+    let otherHtml = "";
+    if (split) {
+      const inTable = list.reduce((a, g) => a + g.current, 0);
+      const matches = split.sum === other.count;
+      const tileColor = ["--series-olimpiade", "--series-oh1", "--series-oh2", "--series-debate"];
+      otherHtml = `
+        <div class="region-other">
+          <div class="ro-title">Di luar tabel region <span>· tidak ikut dihitung di target region di bawah</span></div>
+          <div class="ro-tiles">
+            ${split.items.map((it, i) => `
+              <div class="ro-tile" style="--c:var(${tileColor[i % tileColor.length]})">
+                <span class="ro-name">${escapeHtml(it.name)}</span>
+                <span class="ro-val tnum"${cnt(it.count)}>${fmtInt(it.count)}</span><span class="ro-pct tnum">${Math.round(it.count / split.sum * 100)}% dari ${fmtInt(split.sum)}</span>
+              </div>`).join("")}
+            <div class="ro-tile" style="--c:var(--border-strong)">
+              <span class="ro-name">Total di luar tabel</span>
+              <span class="ro-val tnum"${cnt(split.sum)}>${fmtInt(split.sum)}</span><span class="ro-pct">pendaftar</span>
+            </div>
+          </div>
+          <div class="ro-eq">${matches
+            ? `Total Olimpiade <b class="tnum">${fmtInt(inTable + other.count)}</b> = <b class="tnum">${fmtInt(inTable)}</b> di tabel region + ${split.items.map(it => `<b class="tnum">${fmtInt(it.count)}</b> ${escapeHtml(it.name)}`).join(" + ")}`
+            : `Rincian dari file Excel per ${fmtDateYear(parseIso(window.MEDSPIN_EXTRA.snapshot))}; sheet saat ini menghitung <b class="tnum">${fmtInt(other.count)}</b> di luar tabel.`}</div>
+        </div>`;
+    }
+
     card.innerHTML = `
       <div class="region-toolbar">
         <div class="region-summary">
@@ -1099,8 +1150,9 @@ details.table-toggle summary:hover { color: var(--text-strong); }
               : `butuh total <mark class="hl tnum">${fmtDec(needDay)} orang/hari</mark>${sisa && sisa.daysLeft <= 1 ? " (<b>hari terakhir</b>)" : sisa ? ` selama <b class="tnum">${fmtInt(sisa.daysLeft)}</b> hari lagi` : ""}`}
         </div>
       </div>
+      ${otherHtml}
       <div class="region-list">${body}</div>
-      ${other.count > 0 ? `<div class="region-note">Pendaftar Olimpiade di luar tabel region (tidak dihitung di atas):
+      ${other.count > 0 && !split ? `<div class="region-note">Pendaftar Olimpiade di luar tabel region (tidak dihitung di atas):
         <b class="tnum">${fmtInt(other.count)}</b>${other.names ? ` — ${escapeHtml(other.names)}` : ""}.</div>` : ""}
     `;
   }
