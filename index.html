@@ -467,8 +467,13 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     { id: "1ZZGqk5bBxrT4icGjN06JlWNu1YAz7zt8EnLd5ST9etg", name: "MEDSPIN 2026 — Dashboard Publik", hasRegion: true },
     { id: "1YM7Qf-hVMFtqzR0OP4yIT67OiKlrd35jSNRGCUJFQks", name: "MEDSPIN 2026 Central Dashboard (lama)", hasRegion: false }
   ];
+  // Google melayani gviz dengan header yang boleh di-cache browser, jadi tanpa penangkal
+  // halaman bisa terus menampilkan angka lama walau sheet sudah diperbarui. Nilai berikut
+  // berganti tiap kali data dimuat, sehingga URL-nya selalu baru bagi cache.
+  let loadStamp = 0;
   const GVIZ = (id, sheet) =>
-    `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(sheet)}`;
+    `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:json&headers=1` +
+    `&sheet=${encodeURIComponent(sheet)}&_cb=${loadStamp}`;
 
   // Daftar semua cabang. Urutan di sini hanya dipakai untuk legend, warna, dan penentu
   // urutan saat dua cabang seri; urutan tampil di halaman ditentukan oleh deadline.
@@ -618,7 +623,7 @@ details.table-toggle summary:hover { color: var(--text-strong); }
   }
 
   async function fetchGviz(id, sheetName) {
-    const res = await fetch(GVIZ(id, sheetName));
+    const res = await fetch(GVIZ(id, sheetName), { cache: "no-store" });
     if (!res.ok) throw new Error("HTTP " + res.status + " untuk sheet " + sheetName);
     const text = await res.text();
     const jsonStr = text.substring(text.indexOf("{"), text.lastIndexOf("}") + 1);
@@ -1317,6 +1322,7 @@ details.table-toggle summary:hover { color: var(--text-strong); }
   }
 
   async function loadAll() {
+    loadStamp = Date.now();
     document.getElementById("live-status").textContent = "Memuat data terbaru…";
     const failures = [];
     for (const src of SOURCES) {
