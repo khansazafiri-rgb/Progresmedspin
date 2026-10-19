@@ -469,8 +469,7 @@ details.table-toggle summary:hover { color: var(--text-strong); }
   // yang privat dan masuk ke sheet publik lewat IMPORTRANGE.
   // Sheet lama dipakai sementara bila sheet baru belum siap (belum di-share / izin IMPORTRANGE).
   const SOURCES = [
-    { id: "1ZZGqk5bBxrT4icGjN06JlWNu1YAz7zt8EnLd5ST9etg", name: "MEDSPIN 2026 — Dashboard Publik", hasRegion: true },
-    { id: "1YM7Qf-hVMFtqzR0OP4yIT67OiKlrd35jSNRGCUJFQks", name: "MEDSPIN 2026 Central Dashboard (lama)", hasRegion: false }
+    { id: "1ZZGqk5bBxrT4icGjN06JlWNu1YAz7zt8EnLd5ST9etg", name: "MEDSPIN 2026 — Dashboard Publik", hasRegion: true }
   ];
   // Google melayani gviz dengan header yang boleh di-cache browser, jadi tanpa penangkal
   // halaman bisa terus menampilkan angka lama walau sheet sudah diperbarui. Nilai berikut
@@ -1115,7 +1114,7 @@ details.table-toggle summary:hover { color: var(--text-strong); }
   function renderRegions() {
     const card = document.getElementById("region-card");
     if (!state.source || !state.source.hasRegion) {
-      card.innerHTML = `<div class="region-empty">Data per region belum tersambung — web masih membaca sheet lama.
+      card.innerHTML = `<div class="region-empty">Data per region belum tersambung.
         Selesaikan setup file <b>“MEDSPIN 2026 — Dashboard Publik”</b> (tab Info) supaya bagian ini muncul.</div>`;
       return;
     }
@@ -1420,17 +1419,10 @@ details.table-toggle summary:hover { color: var(--text-strong); }
         (state.extras.length
           ? `<br>${escapeHtml(state.extras.join(", "))} dihitung dari file Excel peserta sudah bayar (data per ${fmtDateYear(parseIso(window.MEDSPIN_EXTRA.snapshot))}).`
           : "");
-      if (src !== SOURCES[0]) {
-        document.getElementById("live-status").textContent = "Terhubung — sheet lama";
-        showBanner(["Web sementara membaca sheet lama karena sheet baru belum siap",
-          failures.join("; "),
-          "Selesaikan setup di tab Info file “MEDSPIN 2026 — Dashboard Publik”."], "warn");
-      } else {
-        const notes = stalenessWarnings(lag, calcAt);
-        document.getElementById("live-status").textContent =
-          notes.length ? "Terhubung — angka belum tentu terbaru" : "Terhubung — data live";
-        if (notes.length) showBanner(notes, "warn"); else hideBanner();
-      }
+      const notes = stalenessWarnings(lag, calcAt);
+      document.getElementById("live-status").textContent =
+        notes.length ? "Terhubung — angka belum tentu terbaru" : "Terhubung — data live";
+      if (notes.length) showBanner(notes, "warn"); else hideBanner();
       return;
     }
     document.getElementById("live-status").textContent = "Gagal memuat data";
