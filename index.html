@@ -777,13 +777,16 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     const dl = deadlineCountdown(row.Deadline, num(row["Days Left"]));
     // Cabang arsip (Road to FK, Open House 1) ditandai ditutup walau tidak punya tanggal deadline.
     const extra = row.__extra || null;
-    const forcedClosed = !!(extra && extra.closed);
+    // Cabang ditutup juga bisa datang langsung dari sheet: tanpa target, tanpa deadline, status "Selesai".
+    const sheetClosed = !extra && !(target > 0) && !fmtDate(row.Deadline) && /selesai/i.test(txt(row.Status));
+    const forcedClosed = !!(extra && extra.closed) || sheetClosed;
     const daysLeft = forcedClosed ? 0 : dl.daysLeft, deadlinePassed = dl.passed || forcedClosed;
     const noTarget = !(target > 0);
     // Dihitung langsung supaya capaian di atas 100% (mis. 506/500) tidak salah dibaca sebagai 1,0%.
     const progress = target > 0 ? (current / target) * 100 : parsePercent(row.Progress);
     const deadlineDate = fmtDate(row.Deadline);
-    const lastDate = extra ? extra.last : null;
+    const firstDate = extra ? extra.first : fmtDate(row["First Date"]);
+    const lastDate = extra ? extra.last : fmtDate(row["Last Date"]);
     // Penentu urutan di antara cabang yang sudah ditutup: yang baru saja tutup paling atas.
     const endTs = deadlineDate ? deadlineDate.getTime() : (lastDate ? lastDate.getTime() : 0);
     // Required Pace dari sheet ikut memakai sisa hari yang lama, jadi dihitung ulang di sini.
@@ -793,7 +796,7 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     const paceGap = Math.max(requiredPace - avgPace, 0);
     return {
       current, target, remaining, daysLeft, deadlinePassed, progress, requiredPace, avgPace, avgKnown, paceGap,
-      noTarget, endTs, firstDate: extra ? extra.first : null, lastDate,
+      noTarget, endTs, firstDate, lastDate,
       status: txt(row.Status),
       deadline: fmtDateLong(row.Deadline),
       snapshot: fmtDateLong(row["Snapshot Date"])
