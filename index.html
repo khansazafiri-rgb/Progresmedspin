@@ -304,10 +304,14 @@ details.table-toggle summary:hover { color: var(--text-strong); }
 .state-banner {
   background: var(--card); border: 1px solid var(--border); border-radius: 12px;
   padding: 14px 18px; font-size: 13px; color: var(--text); margin-bottom: 16px;
-  display: none; align-items: center; gap: 8px;
+  display: none; flex-direction: column; align-items: flex-start; gap: 6px; line-height: 1.55;
 }
 .state-banner.show { display: flex; }
 .state-banner.error { background: var(--crit-bg); border-color: var(--crit-bd); color: var(--crit-fg); }
+.state-banner.warn { background: var(--warn-bg); border-color: var(--warn-bd); color: var(--warn-fg); }
+.state-banner .banner-head { font-weight: 800; font-size: 14px; letter-spacing: -0.01em; }
+.state-banner .banner-head::before { content: "⚠ "; }
+.state-banner.error .banner-head::before { content: "✕ "; }
 
 .footer-note { text-align: center; font-size: 11.5px; color: var(--text-muted); margin-top: 22px; line-height: 1.6; }
 
@@ -405,6 +409,7 @@ details.table-toggle summary:hover { color: var(--text-strong); }
         <div class="meta">
           <span class="meta-item"><span class="dot-live"></span> <span id="live-status">Menghubungkan ke data…</span></span>
           <span class="meta-item" id="snapshot-date-label"></span>
+          <span class="meta-item" id="calc-time-label"></span>
         </div>
       </div>
       <div class="header-actions">
@@ -464,8 +469,7 @@ details.table-toggle summary:hover { color: var(--text-strong); }
   // yang privat dan masuk ke sheet publik lewat IMPORTRANGE.
   // Sheet lama dipakai sementara bila sheet baru belum siap (belum di-share / izin IMPORTRANGE).
   const SOURCES = [
-    { id: "1ZZGqk5bBxrT4icGjN06JlWNu1YAz7zt8EnLd5ST9etg", name: "MEDSPIN 2026 — Dashboard Publik", hasRegion: true },
-    { id: "1YM7Qf-hVMFtqzR0OP4yIT67OiKlrd35jSNRGCUJFQks", name: "MEDSPIN 2026 Central Dashboard (lama)", hasRegion: false }
+    { id: "1ZZGqk5bBxrT4icGjN06JlWNu1YAz7zt8EnLd5ST9etg", name: "MEDSPIN 2026 — Dashboard Publik", hasRegion: true }
   ];
   // Google melayani gviz dengan header yang boleh di-cache browser, jadi tanpa penangkal
   // halaman bisa terus menampilkan angka lama walau sheet sudah diperbarui. Nilai berikut
@@ -599,6 +603,32 @@ details.table-toggle summary:hover { color: var(--text-strong); }
   function fmtDateLong(cell) {
     const d = fmtDate(cell);
     return d ? d.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }) : txt(cell);
+  }
+  // Stempel NOW() dari sheet: fmtDate sengaja membuang jamnya, di sini jamnya dibutuhkan
+  // karena justru selisih jam yang memberi tahu kapan rumus sheet terakhir benar-benar jalan.
+  function parseStamp(cell) {
+    const raw = (cell != null && typeof cell === "object") ? (cell.v != null ? cell.v : cell.f) : cell;
+    if (raw instanceof Date) return raw;
+    if (typeof raw === "number" && raw > 20000 && raw < 80000) {
+      const whole = Math.floor(raw);
+      return new Date(new Date(1899, 11, 30 + whole).getTime() + Math.round((raw - whole) * 86400000));
+    }
+    if (typeof raw === "string") {
+      const m = raw.match(/^Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+),(\d+))?/);
+      if (m) return new Date(+m[1], +m[2], +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
+      const d = new Date(raw);
+      if (!isNaN(d)) return d;
+    }
+    return null;
+  }
+  // Jam perangkat pembaca bisa beda zona dengan sheet, jadi stempel di masa depan dibaca "baru saja".
+  function sinceText(d) {
+    const mins = Math.round((Date.now() - d.getTime()) / 60000);
+    if (mins < 2) return "baru saja";
+    if (mins < 60) return mins + " menit lalu";
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return hours + " jam lalu";
+    return Math.round(hours / 24) + " hari lalu";
   }
   const escapeHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const svgEl = (tag) => document.createElementNS("http://www.w3.org/2000/svg", tag);
@@ -899,6 +929,15 @@ details.table-toggle summary:hover { color: var(--text-strong); }
   }
 
   /* ---------- Isi satu baris cabang yang punya target ---------- */
+  // Cabang yang angkanya datang dari data/extra-branches.js, bukan dari sheet. Angkanya tidak
+  // ikut berubah saat sheet diperbarui, jadi dikatakan langsung di baris cabangnya.
+  function notLiveChip(cat) {
+    if (!state.extras || state.extras.indexOf(cat) < 0) return "";
+    const d = window.MEDSPIN_EXTRA ? parseIso(window.MEDSPIN_EXTRA.snapshot) : null;
+    return `<span class="status-pill pill-warn" title="Angka cabang ini belum tersambung ke Google Sheet, jadi tidak ikut terbarui">` +
+      `<span class="ic"></span>tidak live${d ? " · " + fmtDateShort(d) : ""}</span>`;
+  }
+
   function liveRowInner(cat, d, color) {
     const progress = d.progress;
     const tone = paceTone(d.requiredPace, d.avgPace, d.remaining, d.avgKnown, d.deadlinePassed);
@@ -910,6 +949,7 @@ details.table-toggle summary:hover { color: var(--text-strong); }
           <div class="br-head">
             <span class="br-name">${escapeHtml(cat)}</span>
             ${d.status ? `<span class="status-pill ${statusPillClass(d.status)}${anim("anim-status")}"><span class="ic"></span>${escapeHtml(d.status)}</span>` : ""}
+            ${notLiveChip(cat)}
           </div>
           <div class="br-count">
             <span class="big tnum"${cnt(d.current)}>${fmtInt(d.current)}</span><span class="of"> dari ${fmtInt(d.target)} peserta</span>
@@ -958,6 +998,7 @@ details.table-toggle summary:hover { color: var(--text-strong); }
           <div class="br-head">
             <span class="br-name">${escapeHtml(cat)}</span>
             <span class="status-pill pill-neutral${anim("anim-status")}"><span class="ic"></span>Selesai</span>
+            ${notLiveChip(cat)}
           </div>
           <div class="br-count">
             <span class="big tnum"${cnt(d.current)}>${fmtInt(d.current)}</span><span class="of"> peserta (hasil akhir)</span>
@@ -1073,7 +1114,7 @@ details.table-toggle summary:hover { color: var(--text-strong); }
   function renderRegions() {
     const card = document.getElementById("region-card");
     if (!state.source || !state.source.hasRegion) {
-      card.innerHTML = `<div class="region-empty">Data per region belum tersambung — web masih membaca sheet lama.
+      card.innerHTML = `<div class="region-empty">Data per region belum tersambung.
         Selesaikan setup file <b>“MEDSPIN 2026 — Dashboard Publik”</b> (tab Info) supaya bagian ini muncul.</div>`;
       return;
     }
@@ -1277,12 +1318,30 @@ details.table-toggle summary:hover { color: var(--text-strong); }
     table.innerHTML = html + "</tbody>";
   }
 
-  function showBanner(msg, isError) {
+  // msg boleh satu kalimat atau daftar kalimat; baris pertama dipakai sebagai judul banner.
+  // level: "" netral, "warn" kuning, "error" merah.
+  function showBanner(msg, level) {
     const banner = document.getElementById("state-banner");
-    banner.textContent = msg;
-    banner.className = "state-banner show" + (isError ? " error" : "");
+    const lines = (Array.isArray(msg) ? msg : [msg]).filter(Boolean);
+    banner.innerHTML = lines.map((t, i) =>
+      `<span class="${i === 0 ? "banner-head" : "banner-line"}">${escapeHtml(t)}</span>`).join("");
+    banner.className = "state-banner show" + (level ? " " + level : "");
   }
   function hideBanner() { document.getElementById("state-banner").className = "state-banner"; }
+
+  // Angka di halaman ini lahir dari rumus Google Sheet, dan rumus itu hanya dihitung ulang saat
+  // filenya betul-betul dibuka. Tanpa peringatan, halaman menyajikan angka lama seolah angka hari ini.
+  function stalenessWarnings(lag, calcAt) {
+    const notes = [];
+    if (lag >= 2) {
+      notes.push(`Pendaftar terbaru yang terbaca di sheet tertanggal ${lag} hari lalu.`);
+      notes.push("Kalau sebenarnya sudah ada yang lebih baru, export-nya belum tertempel: buka file Database → tab Data_Mentah → tempel export terbaru.");
+    }
+    if (calcAt && (Date.now() - calcAt.getTime()) > 36 * 3600000) {
+      notes.push(`Sheet terakhir menghitung ${sinceText(calcAt)}. Rumus Google Sheet berhenti begitu filenya ditutup, jadi data yang ditempel setelah itu belum ikut terhitung — buka file Database sebentar sampai angkanya berubah.`);
+    }
+    return notes.length ? ["Angka di halaman ini belum tentu yang terbaru"].concat(notes) : [];
+  }
 
   function rerenderAll() {
     if (!state.current) return;
@@ -1350,25 +1409,29 @@ details.table-toggle summary:hover { color: var(--text-strong); }
       const snapD = fmtDate(snapCell);
       // Sisa hari selalu dihitung dari hari ini; kalau export belum diperbarui, katakan terus terang.
       const lag = snapD ? dayDiff(startOfToday(), new Date(snapD.getFullYear(), snapD.getMonth(), snapD.getDate())) : 0;
+      const calcAt = overall ? parseStamp(overall["Calc Time"]) : null;
       document.getElementById("snapshot-date-label").textContent =
         snapDate ? "Data per " + snapDate + (lag >= 1 ? ` · belum termasuk ${lag === 1 ? "hari ini" : lag + " hari terakhir"}` : "") : "";
+      document.getElementById("calc-time-label").textContent =
+        calcAt ? "Sheet dihitung " + sinceText(calcAt) : "";
       document.getElementById("footer-note").innerHTML =
         `Sumber data: Google Sheet <b>“${escapeHtml(src.name)}”</b>.<br>Dimuat otomatis setiap halaman dibuka.` +
         (state.extras.length
           ? `<br>${escapeHtml(state.extras.join(", "))} dihitung dari file Excel peserta sudah bayar (data per ${fmtDateYear(parseIso(window.MEDSPIN_EXTRA.snapshot))}).`
           : "");
-      document.getElementById("live-status").textContent = "Terhubung — data live";
-      if (src === SOURCES[0]) hideBanner();
-      else showBanner("Web sementara membaca sheet lama karena sheet baru belum siap (" + failures.join("; ") +
-        "). Selesaikan setup di tab Info file “MEDSPIN 2026 — Dashboard Publik”.", false);
+      const notes = stalenessWarnings(lag, calcAt);
+      document.getElementById("live-status").textContent =
+        notes.length ? "Terhubung — angka belum tentu terbaru" : "Terhubung — data live";
+      if (notes.length) showBanner(notes, "warn"); else hideBanner();
       return;
     }
     document.getElementById("live-status").textContent = "Gagal memuat data";
     document.getElementById("branch-list").innerHTML = "";
     document.getElementById("hero-card").innerHTML = "";
     document.getElementById("region-card").innerHTML = "";
-    showBanner("Gagal mengambil data dari Google Sheet. Pastikan sheet bisa diakses (“Anyone with the link”) dan koneksi internet aktif. Detail: " +
-      failures.join(" | "), true);
+    showBanner(["Gagal mengambil data dari Google Sheet",
+      "Pastikan sheet bisa diakses (“Anyone with the link”) dan koneksi internet aktif.",
+      failures.join(" | ")], "error");
   }
 
   applyThemeLabel();
